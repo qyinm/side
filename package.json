@@ -1,0 +1,13 @@
+{
+  "name": "side",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.5.1",
+  "scripts": {
+    "start": "pnpm --filter side-panel start",
+    "package": "pnpm --filter side-panel package",
+    "make": "pnpm --filter side-panel make",
+    "lint": "pnpm --filter side-panel lint",
+    "typecheck": "pnpm --filter side-panel typecheck"
+  }
+}
