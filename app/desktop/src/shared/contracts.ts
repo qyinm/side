@@ -4,6 +4,7 @@ import type {
   AuthType,
   ChatEvent,
   ChatSendRequest,
+  ChatSessionState,
   ProviderCatalog,
 } from "@side/pi-agent";
 
@@ -15,9 +16,12 @@ export type {
   AuthType,
   ChatEvent,
   ChatSendRequest,
+  ChatSessionState,
+  ChatSessionSummary,
   ModelOption,
   ProviderCatalog,
   ProviderOption,
+  ReasoningEffort,
 } from "@side/pi-agent";
 
 export interface SelectionAnchor { x: number; y: number; width: number; height: number }
@@ -28,9 +32,13 @@ export interface SelectionOptions {
 }
 
 export interface SideApi {
+  getSessions(): Promise<ChatSessionState>;
+  createSession(): Promise<ChatSessionState>;
+  selectSession(id: string): Promise<ChatSessionState>;
   getCatalog(): Promise<ProviderCatalog>;
   showProviderMenu(selectedId: string, anchor: SelectionAnchor): Promise<string | undefined>;
   showModelMenu(providerId: string, selectedId: string, anchor: SelectionAnchor): Promise<string | undefined>;
+  showReasoningMenu(providerId: string, modelId: string, selectedId: string, anchor: SelectionAnchor): Promise<string | undefined>;
   getSelectionOptions(): Promise<SelectionOptions>;
   chooseSelection(id: string): void;
   cancelSelection(): void;
@@ -41,12 +49,11 @@ export interface SideApi {
   respondToAuthPrompt(id: string, value: string): Promise<void>;
   cancelAuthPrompt(id: string): Promise<void>;
   openExternal(url: string): Promise<void>;
-  togglePanelSize(): void;
+  expandPanel(): void;
   onChatEvent(callback: (event: ChatEvent) => void): () => void;
   onAuthPrompt(callback: (request: AuthPromptRequest) => void): () => void;
   onAuthEvent(callback: (notification: AuthEventNotification) => void): () => void;
   onPanelFocus(callback: () => void): () => void;
-  onPanelHover(callback: (hovered: boolean) => void): () => void;
 }
 
 declare global {

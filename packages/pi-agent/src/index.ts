@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { SessionStore, type ChatSessionState } from "./sessions";
+export type { ChatSessionState, ChatSessionSummary } from "./sessions";
 import type {
   AssistantMessage,
   AuthEvent as PiAuthEvent,
@@ -8,10 +12,12 @@ import type {
   AuthPrompt as PiAuthPrompt,
   AuthType as PiAuthType,
   Message,
+  ModelThinkingLevel,
   UserMessage,
 } from "@earendil-works/pi-ai";
 
 export type AuthType = PiAuthType;
+export type ReasoningEffort = ModelThinkingLevel;
 
 export type AuthPrompt =
   | { type: "text" | "secret" | "manual_code"; message: string; placeholder?: string }
@@ -38,6 +44,7 @@ export interface ModelOption {
   name: string;
   providerId: string;
   reasoning: boolean;
+  reasoningEfforts: ReasoningEffort[];
   contextWindow: number;
 }
 
@@ -59,6 +66,7 @@ export interface ChatSendRequest {
   providerId: string;
   modelId: string;
   text: string;
+  reasoningEffort?: ReasoningEffort;
 }
 
 export type ChatEvent =
@@ -97,7 +105,7 @@ interface PendingAuthPrompt {
 }
 
 export class PiAgent {
-  private readonly conversation: Message[] = [];
+  private get conversation(): Message[] { return this.sessions.active.messages; }
   private readonly activeStreams = new Map<string, AbortController>();
   private readonly pendingAuthPrompts = new Map<string, PendingAuthPrompt>();
   private disposed = false;
@@ -105,9 +113,13 @@ export class PiAgent {
   private constructor(
     private readonly runtime: ModelRuntime,
     private readonly onEvent: PiAgentOptions["onEvent"],
+    private readonly sessions: SessionStore,
   ) {}
 
   static async create(options: PiAgentOptions): Promise<PiAgent> {
+    // Pi's default OAuth loaders use computed relative imports that desktop
+    // bundlers cannot follow. Register the statically imported flows instead.
+    registerBunOAuthFlows();
     const runtime = await ModelRuntime.create({
       authPath: path.join(options.runtimeDirectory, "auth.json"),
       modelsPath: path.join(options.runtimeDirectory, "models.json"),
@@ -116,7 +128,19 @@ export class PiAgent {
       refreshOnCreate: false,
     });
 
-    return new PiAgent(runtime, options.onEvent);
+    return new PiAgent(runtime, options.onEvent, new SessionStore(path.join(options.runtimeDirectory, "sessions.json")));
+  }
+
+  getSessions(): ChatSessionState { return this.sessions.state(); }
+
+  createSession(): ChatSessionState {
+    if (this.activeStreams.size) throw new Error("Stop the current response before starting a new chat.");
+    return this.sessions.create();
+  }
+
+  selectSession(id: string): ChatSessionState {
+    if (this.activeStreams.size) throw new Error("Stop the current response before switching chats.");
+    return this.sessions.select(id);
   }
 
   getCatalog(): ProviderCatalog {
@@ -126,6 +150,7 @@ export class PiAgent {
         name: model.name,
         providerId: model.provider,
         reasoning: model.reasoning,
+        reasoningEfforts: model.reasoning ? getSupportedThinkingLevels(model) : [],
         contextWindow: model.contextWindow,
       }));
       const authMethods: AuthType[] = [];
@@ -203,7 +228,10 @@ export class PiAgent {
       });
       return;
     }
-    if (this.activeStreams.has(request.requestId)) return;
+    if (this.activeStreams.size) {
+      this.publishChatEvent({ requestId: request.requestId, type: "error", message: "A response is already in progress." });
+      return;
+    }
 
     void this.streamChat(request);
   }
@@ -304,13 +332,26 @@ export class PiAgent {
       return;
     }
 
+    if (request.reasoningEffort !== undefined && !getSupportedThinkingLevels(model).includes(request.reasoningEffort)) {
+      this.publishChatEvent({ requestId: request.requestId, type: "error", message: "That reasoning effort is not supported by this model." });
+      return;
+    }
+
     const controller = new AbortController();
     this.activeStreams.set(request.requestId, controller);
-    this.conversation.push(this.toUserMessage(text));
-
+    let terminalEvent: ChatEvent | undefined;
     try {
+      const session = this.sessions.active;
+      if (!this.conversation.length) session.title = text.replace(/\s+/g, " ").slice(0, 64);
+      session.providerId = request.providerId;
+      session.modelId = request.modelId;
+      session.reasoningEffort = request.reasoningEffort;
+      session.updatedAt = Date.now();
+      this.conversation.push(this.toUserMessage(text));
+      this.sessions.save();
       const stream = this.runtime.streamSimple(model, { messages: [...this.conversation] }, {
         signal: controller.signal,
+        reasoning: request.reasoningEffort === "off" ? undefined : request.reasoningEffort,
       });
       let savedAssistantMessage: AssistantMessage | undefined;
 
@@ -324,41 +365,44 @@ export class PiAgent {
         } else if (event.type === "done") {
           savedAssistantMessage = event.message;
           this.conversation.push(event.message);
-          this.publishChatEvent({
+          session.updatedAt = Date.now();
+          this.sessions.save();
+          terminalEvent = {
             requestId: request.requestId,
             type: "done",
             content: this.getTextContent(event.message),
-          });
+          };
           break;
         } else if (event.type === "error") {
           if (event.reason === "aborted") {
-            this.publishChatEvent({ requestId: request.requestId, type: "stopped" });
+            terminalEvent = { requestId: request.requestId, type: "stopped" };
           } else {
-            this.publishChatEvent({
+            terminalEvent = {
               requestId: request.requestId,
               type: "error",
               message: event.error.errorMessage ?? "The provider could not complete the request.",
-            });
+            };
           }
           break;
         }
       }
 
       if (!savedAssistantMessage && controller.signal.aborted) {
-        this.publishChatEvent({ requestId: request.requestId, type: "stopped" });
+        terminalEvent = { requestId: request.requestId, type: "stopped" };
       }
     } catch (error) {
-      this.publishChatEvent(
+      terminalEvent = (
         controller.signal.aborted
           ? { requestId: request.requestId, type: "stopped" }
           : {
               requestId: request.requestId,
               type: "error",
               message: this.getSafeErrorMessage(error),
-            },
+            }
       );
     } finally {
       this.activeStreams.delete(request.requestId);
+      if (terminalEvent) this.publishChatEvent(terminalEvent);
     }
   }
 

@@ -4,6 +4,7 @@
   "private": true,
   "packageManager": "bun@1.4.0",
   "scripts": {
+    "check:oauth-bundle": "bun app/desktop/scripts/check-oauth-bundle.mjs",
     "landing:dev": "bun run --filter side-landing dev",
     "landing:build": "bun run --filter side-landing build",
     "landing:preview": "bun run --filter side-landing preview",

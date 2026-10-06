@@ -19,10 +19,9 @@ const panelWidth = 430;
 const collapsedPanelHeight = 70;
 const minimumPanelWidth = 180;
 const maximumPanelWidth = 560;
-const minimumExpandedPanelHeight = 480;
+const expandedPanelHeight = 440;
 const dockPanelGap = 0;
-const hoverRevealHeight = 22;
-const pollPanelHoverInterval = 60;
+const pollSelectionFocusInterval = 60;
 const pollDockGeometryInterval = 1200;
 const execFileAsync = promisify(execFile);
 
@@ -39,8 +38,18 @@ let isQuitting = false;
 let dockGeometry: DockGeometry | null = null;
 let isReadingDockGeometry = false;
 let isPanelExpanded = false;
-let isPanelHovered = false;
-let isPointerInsidePanel = false;
+let isAuthenticating = false;
+let collapseTimer: ReturnType<typeof setTimeout> | undefined;
+
+function collapsePanelAfterBlur(): void {
+  clearTimeout(collapseTimer);
+  collapseTimer = setTimeout(() => {
+    if (!panelWindow || panelWindow.isDestroyed() || panelWindow.isFocused()
+      || selectionWindow || isAuthenticating) return;
+    isPanelExpanded = false;
+    positionPanel();
+  }, 150);
+}
 
 function getPiAgent(): PiAgent {
   if (!piAgent) throw new Error("Pi agent is not ready yet.");
@@ -82,7 +91,8 @@ function isChatSendRequest(value: unknown): value is ChatSendRequest {
   return typeof request.requestId === "string"
     && typeof request.providerId === "string"
     && typeof request.modelId === "string"
-    && typeof request.text === "string";
+    && typeof request.text === "string"
+    && (request.reasoningEffort === undefined || ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(request.reasoningEffort));
 }
 
 let selectionWindow: BrowserWindow | undefined;
@@ -103,7 +113,9 @@ function showSelectionMenu(data: SelectionOptions, anchor: SelectionAnchor): Pro
   const anchorX = bounds.x + Math.max(0, Math.min(anchor.x, bounds.width));
   const anchorY = bounds.y + Math.max(0, Math.min(anchor.y, bounds.height));
   const width = Math.min(280, area.width);
-  const height = Math.min(260, Math.max(100, anchorY - area.y - 8));
+  // Match the 27px rows and 5px list padding in the selection popup.
+  const contentHeight = data.options.length * 27 + 10;
+  const height = Math.min(contentHeight, 260, Math.max(37, anchorY - area.y - 8));
   const popup = new BrowserWindow({
     title: data.title,
     x: Math.round(Math.max(area.x, Math.min(anchorX, area.x + area.width - width))),
@@ -150,6 +162,16 @@ function showSelectionMenu(data: SelectionOptions, anchor: SelectionAnchor): Pro
       selectionOptions = undefined;
       selectionResult = undefined;
       isPointerInsideSelection = false;
+      if (result !== undefined && parent.isVisible()) {
+        // Restore the key window after macOS has finished closing the popup.
+        setImmediate(() => {
+          if (parent.isDestroyed() || !parent.isVisible()) return;
+          app.focus({ steal: true });
+          parent.focus();
+          parent.webContents.focus();
+          sendToPanel("panel:focus", undefined);
+        });
+      } else collapsePanelAfterBlur();
       resolve(result);
     });
     const load = MAIN_WINDOW_VITE_DEV_SERVER_URL
@@ -160,12 +182,25 @@ function showSelectionMenu(data: SelectionOptions, anchor: SelectionAnchor): Pro
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("sessions:get", () => getPiAgent().getSessions());
+  ipcMain.handle("sessions:create", (event) => {
+    if (event.sender !== panelWindow?.webContents) throw new Error("Invalid session window.");
+    return getPiAgent().createSession();
+  });
+  ipcMain.handle("sessions:select", (event, id: unknown) => {
+    if (event.sender !== panelWindow?.webContents || typeof id !== "string") throw new Error("Invalid chat session.");
+    return getPiAgent().selectSession(id);
+  });
   ipcMain.handle("catalog:get", () => getPiAgent().getCatalog());
   ipcMain.handle("selection:provider", (_event, selectedId: string, anchor: SelectionAnchor) =>
     showSelectionMenu({ title: "Provider", options: getPiAgent().getCatalog().providers, selectedId }, anchor));
   ipcMain.handle("selection:model", (_event, providerId: string, selectedId: string, anchor: SelectionAnchor) => {
     const provider = getPiAgent().getCatalog().providers.find((entry) => entry.id === providerId);
     return showSelectionMenu({ title: "Model", options: provider?.models ?? [], selectedId }, anchor);
+  });
+  ipcMain.handle("selection:reasoning", (_event, providerId: string, modelId: string, selectedId: string, anchor: SelectionAnchor) => {
+    const model = getPiAgent().getCatalog().models.find((entry) => entry.providerId === providerId && entry.id === modelId);
+    return showSelectionMenu({ title: "Reasoning effort", options: (model?.reasoningEfforts ?? []).map((id) => ({ id, name: id === "xhigh" ? "Extra high" : id[0].toUpperCase() + id.slice(1) })), selectedId }, anchor);
   });
   ipcMain.handle("selection:options", (event) => {
     if (event.sender !== selectionWindow?.webContents || !selectionOptions) throw new Error("No selection is open.");
@@ -180,8 +215,14 @@ function registerIpcHandlers(): void {
     if (event.sender === selectionWindow?.webContents) selectionWindow?.close();
   });
   ipcMain.handle("auth:login", async (_event, providerId: string, type: AuthType) => {
-    await getPiAgent().login(providerId, type);
-    sendToPanel("catalog:updated", getPiAgent().getCatalog());
+    isAuthenticating = true;
+    try {
+      await getPiAgent().login(providerId, type);
+      sendToPanel("catalog:updated", getPiAgent().getCatalog());
+    } finally {
+      isAuthenticating = false;
+      collapsePanelAfterBlur();
+    }
   });
   ipcMain.handle("auth:logout", async (_event, providerId: string) => {
     await getPiAgent().logout(providerId);
@@ -201,13 +242,14 @@ function registerIpcHandlers(): void {
   ipcMain.on("chat:stop", (_event, requestId: string) => {
     if (typeof requestId === "string") getPiAgent().stopMessage(requestId);
   });
-  ipcMain.on("panel:toggle-size", () => {
-    isPanelExpanded = !isPanelExpanded;
+  ipcMain.on("panel:expand", (event) => {
+    if (event.sender !== panelWindow?.webContents || isPanelExpanded) return;
+    isPanelExpanded = true;
     positionPanel();
-    updatePanelHoverState();
-  });
-  ipcMain.on("panel:hover-state:get", (event) => {
-    event.sender.send("panel:hover-state", isPanelHovered);
+    app.focus({ steal: true });
+    panelWindow?.focus();
+    panelWindow?.webContents.focus();
+    sendToPanel("panel:focus", undefined);
   });
 }
 
@@ -288,16 +330,14 @@ function positionPanel(): void {
       const dockHeight = Math.max(1, Math.min(dockRect.height, bounds.height));
       const dockBottom = bounds.y + bounds.height;
       const dockPanelHeight = Math.min(dockHeight + 4, bounds.height);
-      heightToUse = isPanelExpanded
-        ? Math.max(dockHeight, dockBottom - bounds.y)
-        : Math.min(dockPanelHeight + hoverRevealHeight, bounds.height);
+      heightToUse = dockPanelHeight;
       panelY = dockBottom - heightToUse;
       minimumHeight = heightToUse;
       isDockAligned = true;
     } else {
       heightToUse = Math.min(
         collapsedPanelHeight,
-        Math.max(1, dockRect.y - workArea.y + hoverRevealHeight),
+        Math.max(1, dockRect.y - workArea.y),
       );
       panelY = dockRect.y - heightToUse;
       minimumHeight = Math.min(44, heightToUse);
@@ -309,9 +349,11 @@ function positionPanel(): void {
   }
 
   if (isPanelExpanded) {
-    heightToUse = Math.max(1, workArea.height);
-    panelY = workArea.y;
-    minimumHeight = Math.min(minimumExpandedPanelHeight, heightToUse);
+    const compactBottom = panelY + heightToUse;
+    heightToUse = Math.max(1, Math.min(expandedPanelHeight, workArea.height));
+    // Grow upwards from the compact input, keeping its bottom edge in place.
+    panelY = Math.max(workArea.y, compactBottom - heightToUse);
+    minimumHeight = Math.min(360, heightToUse);
   }
 
   panelX = Math.min(Math.max(panelX, bounds.x), bounds.x + bounds.width - widthToUse);
@@ -335,7 +377,6 @@ function positionPanel(): void {
   if (currentMaximumWidth !== maximumPanelWidth || currentMaximumHeight !== bounds.height) {
     panelWindow.setMaximumSize(maximumPanelWidth, bounds.height);
   }
-  if (panelWindow.hasShadow() !== isPanelExpanded) panelWindow.setHasShadow(isPanelExpanded);
   if (
     currentBounds.x === nextBounds.x
     && currentBounds.y === nextBounds.y
@@ -358,7 +399,7 @@ function togglePanel(): void {
   sendToPanel("panel:focus", undefined);
 }
 
-function updatePanelHoverState(): void {
+function updateSelectionFocus(): void {
   if (selectionWindow && !selectionWindow.isDestroyed()) {
     const popup = selectionWindow;
     const bounds = popup.getBounds();
@@ -374,21 +415,6 @@ function updatePanelHoverState(): void {
     isPointerInsideSelection = isInside;
     return;
   }
-  if (!panelWindow || panelWindow.isDestroyed()) return;
-  const bounds = panelWindow.getBounds();
-  const cursor = screen.getCursorScreenPoint();
-  const isHovered = panelWindow.isVisible()
-    && cursor.x >= bounds.x
-    && cursor.x < bounds.x + bounds.width
-    && cursor.y >= bounds.y
-    && cursor.y < bounds.y + bounds.height;
-  if (isHovered && !isPointerInsidePanel) app.focus({ steal: true });
-  if (isHovered && !panelWindow.isFocused()) panelWindow.focus();
-  isPointerInsidePanel = isHovered;
-  const shouldRevealControls = isHovered || isPanelExpanded;
-  if (shouldRevealControls === isPanelHovered) return;
-  isPanelHovered = shouldRevealControls;
-  sendToPanel("panel:hover-state", isPanelHovered);
 }
 
 function createPanel(): void {
@@ -404,7 +430,7 @@ function createPanel(): void {
     minHeight: 44,
     maxWidth: 560,
     maxHeight: 1600,
-    hasShadow: true,
+    hasShadow: false,
     skipTaskbar: true,
     ...(process.platform === "darwin"
       ? { type: "panel" as const, acceptFirstMouse: true }
@@ -423,6 +449,11 @@ function createPanel(): void {
   positionPanel();
   panelWindow.once("ready-to-show", () => panelWindow?.showInactive());
   panelWindow.on("resize", positionPanel);
+  panelWindow.on("blur", collapsePanelAfterBlur);
+  panelWindow.on("focus", () => {
+    clearTimeout(collapseTimer);
+    if (isPanelExpanded) sendToPanel("panel:focus", undefined);
+  });
 
   panelWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   panelWindow.webContents.on("will-navigate", (event, targetUrl) => {
@@ -471,7 +502,7 @@ void app.whenReady().then(async () => {
   }
   await refreshDockGeometry();
   createPanel();
-  setInterval(updatePanelHoverState, pollPanelHoverInterval);
+  setInterval(updateSelectionFocus, pollSelectionFocusInterval);
   setInterval(() => void refreshDockGeometry(), pollDockGeometryInterval);
   screen.on("display-metrics-changed", positionPanel);
   screen.on("display-added", positionPanel);

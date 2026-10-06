@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
-  ConversationEmptyState,
 } from "../components/ai-elements/conversation";
 import {
   Message,
@@ -15,16 +14,19 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "../components/ai-elements/prompt-input";
-import { ArrowUp, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowUp, ArrowUpRight, ChevronDown, Globe, History, KeyRound, LogIn, MessageCircle, Plus, Unplug, X } from "lucide-react";
 import type {
   AuthPrompt,
   AuthEventNotification,
   AuthPromptRequest,
   AuthType,
   ChatEvent,
+  ChatSessionState,
+  ChatSessionSummary,
   ModelOption,
   ProviderCatalog,
   ProviderOption,
+  ReasoningEffort,
 } from "../shared/contracts";
 
 interface ChatMessage {
@@ -54,10 +56,14 @@ function describeAuthEvent(event: AuthEventNotification["event"]): string {
 }
 
 export function App() {
-  const [isPanelHovered, setIsPanelHovered] = useState(false);
   const [catalog, setCatalog] = useState<ProviderCatalog>();
   const [selectedModelId, setSelectedModelId] = useState("");
+  const [preferredEffort, setPreferredEffort] = useState<ReasoningEffort>("medium");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(true);
   const [draft, setDraft] = useState("");
   const [streamingId, setStreamingId] = useState<string>();
   const [activeProviderId, setActiveProviderId] = useState<string>();
@@ -65,7 +71,9 @@ export function App() {
   const [authNotice, setAuthNotice] = useState<AuthEventNotification>();
   const [errorMessage, setErrorMessage] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const didTogglePanelOnPress = useRef(false);
+  const isInputPointerDown = useRef(false);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const activeRequestRef = useRef<string | undefined>(undefined);
 
   const models = catalog?.models ?? [];
   const selectedModel = useMemo(
@@ -73,6 +81,9 @@ export function App() {
     [models, selectedModelId],
   );
   const selectedProvider = catalog?.providers.find((provider) => provider.id === selectedModel?.providerId);
+  const reasoningEfforts = selectedModel?.reasoningEfforts ?? [];
+  const selectedEffort = reasoningEfforts.includes(preferredEffort) ? preferredEffort
+    : reasoningEfforts.includes("medium") ? "medium" : reasoningEfforts[0];
 
   const refreshCatalog = useCallback(async () => {
     try {
@@ -92,6 +103,9 @@ export function App() {
 
   useEffect(() => {
     void refreshCatalog();
+    void window.side.getSessions().then(applySession).catch((error) => {
+      setErrorMessage(error instanceof Error ? error.message : "Could not load chat history.");
+    }).finally(() => setSessionBusy(false));
     return window.side.onChatEvent(handleChatEvent);
   }, [refreshCatalog]);
 
@@ -107,6 +121,47 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!historyOpen) return;
+    historyRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    const closeOutside = (event: PointerEvent) => {
+      if (!historyRef.current?.contains(event.target as Node)) setHistoryOpen(false);
+    };
+    const close = () => setHistoryOpen(false);
+    document.addEventListener("pointerdown", closeOutside);
+    window.addEventListener("blur", close);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      window.removeEventListener("blur", close);
+    };
+  }, [historyOpen]);
+
+  function applySession(state: ChatSessionState): void {
+    setSessions(state.sessions);
+    setActiveSessionId(state.activeSession.id);
+    setMessages(state.activeSession.messages);
+    if (state.activeSession.providerId && state.activeSession.modelId) {
+      setSelectedModelId(`${state.activeSession.providerId}::${state.activeSession.modelId}`);
+    }
+    if (state.activeSession.reasoningEffort) setPreferredEffort(state.activeSession.reasoningEffort);
+  }
+
+  async function changeSession(id?: string): Promise<void> {
+    if (streamingId || sessionBusy || activeProviderId) return;
+    setSessionBusy(true);
+    setHistoryOpen(false);
+    try {
+      applySession(await (id ? window.side.selectSession(id) : window.side.createSession()));
+      setDraft("");
+      setErrorMessage("");
+      setAuthNotice(undefined);
+      activeRequestRef.current = undefined;
+      inputRef.current?.focus();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Could not open chat.");
+    } finally { setSessionBusy(false); }
+  }
+
+  useEffect(() => {
     const removeCatalogListener = window.addEventListener
       ? (() => {
           const listener = () => void refreshCatalog();
@@ -118,12 +173,17 @@ export function App() {
   }, [refreshCatalog]);
 
   useEffect(() => {
-    return window.side.onPanelFocus(() => inputRef.current?.focus());
+    return window.side.onPanelFocus(() => {
+      window.side.expandPanel();
+      requestAnimationFrame(() => inputRef.current?.focus());
+    });
   }, []);
 
-  useEffect(() => window.side.onPanelHover(setIsPanelHovered), []);
-
   function handleChatEvent(event: ChatEvent): void {
+    if (event.requestId !== activeRequestRef.current) return;
+    if (event.type !== "delta") {
+      void window.side.getSessions().then((state) => setSessions(state.sessions)).catch(() => undefined);
+    }
     if (event.type === "delta") {
       setMessages((current) => {
         const existing = current.find((message) => message.id === event.requestId);
@@ -171,7 +231,9 @@ export function App() {
       await refreshCatalog();
       setAuthNotice(undefined);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not connect the provider.");
+      const message = error instanceof Error ? error.message : "Could not connect the provider.";
+      setErrorMessage(message.endsWith("Authentication was cancelled.") ? "" : message);
+      setAuthNotice(undefined);
     } finally {
       setActiveProviderId(undefined);
       setAuthPrompt(undefined);
@@ -209,51 +271,54 @@ export function App() {
 
   function sendMessage(messageText = draft): void {
     const text = messageText.trim();
-    if (!text || !selectedModel || streamingId) return;
+    if (!text || !selectedModel || streamingId || sessionBusy) return;
     const requestId = crypto.randomUUID();
     setErrorMessage("");
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", content: text }]);
     setDraft("");
     setStreamingId(requestId);
+    activeRequestRef.current = requestId;
     window.side.sendMessage({
       requestId,
       providerId: selectedModel.providerId,
       modelId: selectedModel.id,
+      reasoningEffort: selectedEffort,
       text,
     });
   }
 
   return (
-    <main className={`panel-shell${isPanelHovered ? " panel-shell--hovered" : ""}`}>
-      <header className="topbar">
-        <div className="brand-mark" aria-hidden="true"><span /></div>
-        <div className="brand-copy">
-          <span className="brand-name">side</span>
-          <span className="brand-caption">ONE CHAT · ANY MODEL</span>
+    <main className="panel-shell">
+      <div className="session-toolbar">
+        <div className="session-history" ref={historyRef} onKeyDown={(event) => {
+          if (event.key === "Escape") { setHistoryOpen(false); historyRef.current?.querySelector<HTMLButtonElement>('.session-history-trigger')?.focus(); }
+          if (historyOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+            event.preventDefault();
+            const items = Array.from(historyRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+            const index = items.indexOf(document.activeElement as HTMLButtonElement);
+            items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+          }
+        }}>
+          <button type="button" className="session-history-trigger" aria-label="Session history" title="Session history"
+            aria-haspopup="menu" aria-expanded={historyOpen} disabled={sessionBusy || Boolean(streamingId) || Boolean(activeProviderId)}
+            onClick={() => setHistoryOpen((open) => !open)}><History aria-hidden="true" /><ChevronDown aria-hidden="true" /></button>
+          {historyOpen && <div className="session-history-popover" role="menu" aria-label="Recent chats">
+            <div className="session-history-label">Recent chats</div>
+            {sessions.length ? sessions.map((session) => (
+              <button type="button" role="menuitem" className="session-history-item" key={session.id}
+                aria-current={session.id === activeSessionId ? "true" : undefined} onClick={() => void changeSession(session.id)}>
+                <MessageCircle aria-hidden="true" /><span><span>{session.title}</span><small>{new Date(session.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></span>
+              </button>
+            )) : <p className="session-history-empty">Your conversations will appear here.</p>}
+          </div>}
         </div>
-      </header>
-
-      {selectedProvider && !selectedProvider.configured && (
-        <ProviderConnectCard
-          provider={selectedProvider}
-          busy={activeProviderId === selectedProvider.id}
-          onConnect={(type) => void connectProvider(selectedProvider, type)}
-        />
-      )}
-
-      <Conversation className="conversation" aria-live="polite">
-        {messages.length === 0 ? (
-          <ConversationEmptyState className="empty-state">
-            <div className="empty-orbit"><span /><span /><span /></div>
-            <h1>What’s on your mind?</h1>
-            <p>One calm space for the models you already use.</p>
-            {!selectedProvider?.configured && <span className="empty-hint">Connect a provider to start chatting</span>}
-          </ConversationEmptyState>
-        ) : (
+        <button type="button" className="session-new" aria-label="New session" title="New session"
+          disabled={sessionBusy || Boolean(streamingId) || Boolean(activeProviderId)} onClick={() => void changeSession()}><Plus aria-hidden="true" /></button>
+      </div>
+      <Conversation key={activeSessionId} className="conversation" aria-live="polite">
           <ConversationContent className="message-list">
             {messages.map((message) => (
               <Message className="chat-message" from={message.role} key={message.id}>
-                {message.role === "assistant" && <span className="assistant-mark" aria-hidden="true">s</span>}
                 <MessageContent className="chat-message-content">
                   {message.content
                     ? <MessageResponse>{message.content}</MessageResponse>
@@ -263,12 +328,10 @@ export function App() {
             ))}
             {streamingId && !messages.some((message) => message.id === streamingId) && (
               <Message className="chat-message" from="assistant" key="pending-response">
-                <span className="assistant-mark" aria-hidden="true">s</span>
                 <MessageContent className="chat-message-content"><span className="typing-indicator"><i /><i /><i /></span></MessageContent>
               </Message>
             )}
           </ConversationContent>
-        )}
       </Conversation>
 
       {(errorMessage || authNotice) && (
@@ -289,15 +352,6 @@ export function App() {
       )}
 
       <footer className="composer-area">
-        {selectedProvider?.configured && (
-          <div className="provider-status-line">
-            <span className="status-indicator" />
-            <span>{selectedProvider.name} connected</span>
-            <button onClick={() => void disconnectProvider(selectedProvider)} disabled={Boolean(activeProviderId)}>
-              {activeProviderId === selectedProvider.id ? "…" : "Disconnect"}
-            </button>
-          </div>
-        )}
         <PromptInput
           className="composer"
           onSubmit={({ text }) => {
@@ -309,6 +363,16 @@ export function App() {
             className="composer-input"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onPointerDown={() => { isInputPointerDown.current = true; }}
+            onPointerUp={() => {
+              isInputPointerDown.current = false;
+              window.side.expandPanel();
+            }}
+            onPointerCancel={() => { isInputPointerDown.current = false; }}
+            onFocus={() => {
+              // Finish the initial click before moving the input upwards.
+              if (!isInputPointerDown.current) window.side.expandPanel();
+            }}
             placeholder="Ask anything…"
             aria-label="Message"
             rows={1}
@@ -357,49 +421,57 @@ export function App() {
                 <span>{formatModelName(selectedModel)}</span>
                 <ChevronDown aria-hidden="true" />
               </button>
-              {selectedModel?.reasoning && <span className="reasoning-indicator" title="This model supports reasoning; effort level is not adjustable here">Reasoning</span>}
+              {selectedEffort && (
+                <button type="button" className="composer-reasoning-select"
+                  aria-label="Reasoning effort" title="Reasoning effort" aria-haspopup="menu"
+                  disabled={Boolean(streamingId) || Boolean(activeProviderId)}
+                  onClick={async (event) => {
+                    if (!selectedModel) return;
+                    const anchor = event.currentTarget.getBoundingClientRect().toJSON();
+                    try {
+                      const effort = await window.side.showReasoningMenu(selectedModel.providerId, selectedModel.id, selectedEffort, anchor);
+                      const supportedEffort = reasoningEfforts.find((entry) => entry === effort);
+                      if (supportedEffort) setPreferredEffort(supportedEffort);
+                    } catch (error) {
+                      setErrorMessage(error instanceof Error ? error.message : "Could not open reasoning menu.");
+                    }
+                  }}>
+                  <span>{selectedEffort === "xhigh" ? "Extra high" : selectedEffort[0].toUpperCase() + selectedEffort.slice(1)}</span>
+                  <ChevronDown aria-hidden="true" />
+                </button>
+              )}
             </div>
+            {selectedProvider && (
+              <div className="composer-auth-actions">
+                {selectedProvider.configured ? (
+                  <button type="button" className="composer-tool-button" aria-label="Disconnect provider" title="Disconnect provider"
+                    disabled={Boolean(activeProviderId)} onClick={() => void disconnectProvider(selectedProvider)}>
+                    <Unplug aria-hidden="true" />
+                  </button>
+                ) : selectedProvider.authMethods.map((method) => (
+                  <button key={method} type="button" className="composer-tool-button"
+                    aria-label={method === "oauth" ? "Sign in" : "Add API key"}
+                    title={method === "oauth" ? "Sign in" : "Add API key"}
+                    disabled={Boolean(activeProviderId)} onClick={() => void connectProvider(selectedProvider, method)}>
+                    {method === "oauth" ? <LogIn aria-hidden="true" /> : <KeyRound aria-hidden="true" />}
+                  </button>
+                ))}
+              </div>
+            )}
             <PromptInputSubmit
               className="send-button"
               status={streamingId ? "streaming" : "ready"}
               onStop={() => { if (streamingId) window.side.stopMessage(streamingId); }}
-              disabled={!streamingId && (!draft.trim() || !selectedProvider?.configured)}
+              disabled={!streamingId && (sessionBusy || !draft.trim() || !selectedProvider?.configured)}
             ><ArrowUp aria-hidden="true" /></PromptInputSubmit>
           </PromptInputFooter>
         </PromptInput>
-        <div className="composer-hint"><span>↵ send</span><span>⇧ ↵ new line</span></div>
       </footer>
-
-      <button
-        className="panel-expand-control"
-        type="button"
-        aria-label="Toggle panel size"
-        title="Toggle panel size"
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          event.stopPropagation();
-          didTogglePanelOnPress.current = true;
-          window.side.togglePanelSize();
-        }}
-        onMouseDown={(event) => {
-          if (event.button !== 0 || didTogglePanelOnPress.current) return;
-          event.stopPropagation();
-          didTogglePanelOnPress.current = true;
-          window.side.togglePanelSize();
-        }}
-        onClick={(event) => {
-          if (event.detail === 0 || !didTogglePanelOnPress.current) {
-            window.side.togglePanelSize();
-          }
-          didTogglePanelOnPress.current = false;
-        }}
-      >
-        <ChevronUp aria-hidden="true" />
-      </button>
 
       {authPrompt && (
         <AuthPromptDialog
           request={authPrompt}
+          providerName={catalog?.providers.find((provider) => provider.id === authPrompt.providerId)?.name ?? authPrompt.providerId}
           onSubmit={(value) => void submitAuthPrompt(value)}
           onCancel={() => void cancelAuthPrompt()}
         />
@@ -408,39 +480,14 @@ export function App() {
   );
 }
 
-function ProviderConnectCard({
-  provider,
-  busy,
-  onConnect,
-}: {
-  provider: ProviderOption;
-  busy: boolean;
-  onConnect: (type: AuthType) => void;
-}) {
-  return (
-    <div className="connect-card">
-      <div>
-        <span className="connect-eyebrow">PROVIDER SETUP</span>
-        <p>Connect {provider.name} with Pi’s built-in sign-in.</p>
-      </div>
-      <div className="connect-actions">
-        {provider.authMethods.map((method) => (
-          <button key={method} className="connect-button" disabled={busy} onClick={() => onConnect(method)}>
-            {busy ? "Connecting…" : method === "oauth" ? "Sign in" : "Add API key"}
-          </button>
-        ))}
-        {!provider.authMethods.length && <span className="muted-copy">No interactive sign-in available</span>}
-      </div>
-    </div>
-  );
-}
-
 function AuthPromptDialog({
   request,
+  providerName,
   onSubmit,
   onCancel,
 }: {
   request: AuthPromptRequest;
+  providerName: string;
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -449,20 +496,36 @@ function AuthPromptDialog({
   const kind = getPromptKind(prompt);
   const message = prompt.message;
   const placeholder = "placeholder" in prompt ? prompt.placeholder : undefined;
+  const isCodexMethod = request.providerId === "openai-codex" && prompt.type === "select"
+    && prompt.options.every((option) => option.id === "browser" || option.id === "device_code");
 
   return (
     <div className="dialog-backdrop">
-      <form className="auth-dialog" onSubmit={(event) => { event.preventDefault(); onSubmit(value); }}>
-        <div className="dialog-kicker">{request.providerId} · SIGN IN</div>
-        <h2>{message}</h2>
+      <form className="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title"
+        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onCancel(); } }}
+        onSubmit={(event) => { event.preventDefault(); onSubmit(value); }}>
+        <div className="auth-dialog-header">
+          <span className="auth-provider-name">{providerName}</span>
+          <button type="button" className="auth-close" aria-label="Cancel sign in" onClick={onCancel}><X aria-hidden="true" /></button>
+        </div>
+        <h2 id="auth-dialog-title">{isCodexMethod ? "Connect your account" : message}</h2>
+        {isCodexMethod && <p className="auth-description">Choose how you’d like to sign in.</p>}
         {prompt.type === "select" ? (
           <div className="auth-options">
-            {prompt.options.map((option) => (
-              <button className="auth-option" type="button" key={option.id} onClick={() => onSubmit(option.id)}>
-                <span>{option.label}</span>
-                {option.description && <small>{option.description}</small>}
-              </button>
-            ))}
+            {prompt.options.map((option, index) => {
+              const browserLogin = isCodexMethod && option.id === "browser";
+              return (
+                <button className={`auth-option${browserLogin ? " auth-option-recommended" : ""}`} type="button"
+                  key={option.id} autoFocus={index === 0} onClick={() => onSubmit(option.id)}>
+                  {isCodexMethod && <span className="auth-option-icon">{browserLogin ? <Globe aria-hidden="true" /> : <KeyRound aria-hidden="true" />}</span>}
+                  <span className="auth-option-copy">
+                    <span>{isCodexMethod ? browserLogin ? "Continue in browser" : "Use a device code" : option.label}</span>
+                    {(isCodexMethod || option.description) && <small>{isCodexMethod ? browserLogin ? "Sign in with your ChatGPT account" : "Enter a one-time code in your browser" : option.description}</small>}
+                  </span>
+                  {isCodexMethod && <ArrowUpRight className="auth-option-arrow" aria-hidden="true" />}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <input
@@ -473,10 +536,10 @@ function AuthPromptDialog({
             placeholder={placeholder ?? (kind === "secret" ? "API key" : "Enter value")}
           />
         )}
-        <div className="dialog-actions">
+        {kind !== "select" && <div className="dialog-actions">
           <button className="quiet-button" type="button" onClick={onCancel}>Cancel</button>
-          {kind !== "select" && <button className="primary-button" type="submit" disabled={!value.trim()}>Continue</button>}
-        </div>
+          <button className="primary-button" type="submit" disabled={!value.trim()}>Continue</button>
+        </div>}
       </form>
     </div>
   );
