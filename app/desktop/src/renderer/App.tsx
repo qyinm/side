@@ -322,9 +322,10 @@ export function App() {
                 aria-label="Provider"
                 aria-haspopup="menu"
                 disabled={!catalog?.providers.length || Boolean(streamingId) || Boolean(activeProviderId)}
-                onClick={async () => {
+                onClick={async (event) => {
+                  const anchor = event.currentTarget.getBoundingClientRect().toJSON();
                   try {
-                    const providerId = await window.side.showProviderMenu(selectedProvider?.id ?? "");
+                    const providerId = await window.side.showProviderMenu(selectedProvider?.id ?? "", anchor);
                     const provider = catalog?.providers.find((entry) => entry.id === providerId);
                     if (provider?.models[0]) setSelectedModelId(getModelKey(provider.models[0]));
                   } catch (error) {
@@ -341,10 +342,11 @@ export function App() {
                 aria-label="Model"
                 aria-haspopup="menu"
                 disabled={!selectedProvider?.models.length || Boolean(streamingId) || Boolean(activeProviderId)}
-                onClick={async () => {
+                onClick={async (event) => {
+                  const anchor = event.currentTarget.getBoundingClientRect().toJSON();
                   if (!selectedProvider) return;
                   try {
-                    const modelId = await window.side.showModelMenu(selectedProvider.id, selectedModel?.id ?? "");
+                    const modelId = await window.side.showModelMenu(selectedProvider.id, selectedModel?.id ?? "", anchor);
                     const model = selectedProvider.models.find((entry) => entry.id === modelId);
                     if (model) setSelectedModelId(getModelKey(model));
                   } catch (error) {

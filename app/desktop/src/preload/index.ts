@@ -3,8 +3,11 @@ import type { SideApi } from "../shared/contracts";
 
 const sideApi: SideApi = {
   getCatalog: () => ipcRenderer.invoke("catalog:get"),
-  showProviderMenu: (selectedId) => ipcRenderer.invoke("selection:provider", selectedId),
-  showModelMenu: (providerId, selectedId) => ipcRenderer.invoke("selection:model", providerId, selectedId),
+  showProviderMenu: (selectedId, anchor) => ipcRenderer.invoke("selection:provider", selectedId, anchor),
+  showModelMenu: (providerId, selectedId, anchor) => ipcRenderer.invoke("selection:model", providerId, selectedId, anchor),
+  getSelectionOptions: () => ipcRenderer.invoke("selection:options"),
+  chooseSelection: (id) => ipcRenderer.send("selection:choose", id),
+  cancelSelection: () => ipcRenderer.send("selection:cancel"),
   sendMessage: (request) => ipcRenderer.send("chat:send", request),
   stopMessage: (requestId) => ipcRenderer.send("chat:stop", requestId),
   login: (providerId, type) => ipcRenderer.invoke("auth:login", providerId, type),

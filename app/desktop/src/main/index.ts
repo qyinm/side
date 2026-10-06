@@ -7,11 +7,11 @@ import {
   BrowserWindow,
   globalShortcut,
   ipcMain,
-  Menu,
   screen,
   shell,
 } from "electron";
 import { PiAgent } from "@side/pi-agent";
+import type { SelectionAnchor, SelectionOptions } from "../shared/contracts";
 import type { AuthType, ChatSendRequest, PiAgentEvent } from "@side/pi-agent";
 
 const panelWidth = 430;
@@ -84,39 +84,99 @@ function isChatSendRequest(value: unknown): value is ChatSendRequest {
     && typeof request.text === "string";
 }
 
-let selectionMenu: Menu | undefined;
+let selectionWindow: BrowserWindow | undefined;
+let selectionOptions: SelectionOptions | undefined;
+let selectionResult: string | undefined;
+let isPointerInsideSelection = false;
 
-function showSelectionMenu(options: { id: string; name: string }[], selectedId: string): Promise<string | undefined> {
-  if (!panelWindow || panelWindow.isDestroyed() || selectionMenu || !options.length) {
+function showSelectionMenu(data: SelectionOptions, anchor: SelectionAnchor): Promise<string | undefined> {
+  if (!panelWindow || panelWindow.isDestroyed() || selectionWindow || !data.options.length) {
     return Promise.resolve(undefined);
   }
-  const window = panelWindow;
-  return new Promise((resolve) => {
-    let selected: string | undefined;
-    const menu = Menu.buildFromTemplate(options.map((option) => ({
-      label: option.name,
-      type: "radio" as const,
-      checked: option.id === selectedId,
-      click: () => { selected = option.id; },
-    })));
-    selectionMenu = menu;
-    menu.popup({
-      window,
-      callback: () => {
-        selectionMenu = undefined;
-        resolve(selected);
-      },
+  if (!anchor || ![anchor.x, anchor.y, anchor.width, anchor.height].every(Number.isFinite)) {
+    return Promise.reject(new Error("Invalid selection anchor."));
+  }
+  const parent = panelWindow;
+  const bounds = parent.getBounds();
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const anchorX = bounds.x + Math.max(0, Math.min(anchor.x, bounds.width));
+  const anchorY = bounds.y + Math.max(0, Math.min(anchor.y, bounds.height));
+  const width = Math.min(280, area.width);
+  const height = Math.min(260, Math.max(100, anchorY - area.y - 8));
+  const popup = new BrowserWindow({
+    title: data.title,
+    x: Math.round(Math.max(area.x, Math.min(anchorX, area.x + area.width - width))),
+    y: Math.round(Math.max(area.y, anchorY - height - 6)),
+    width, height,
+    show: false, frame: false, transparent: true, resizable: false,
+    skipTaskbar: true, hasShadow: true, focusable: true,
+    ...(process.platform === "darwin" ? { acceptFirstMouse: true } : {}),
+    webPreferences: {
+      preload: path.join(__dirname, "index.js"),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+    },
+  });
+  selectionWindow = popup;
+  selectionOptions = data;
+  selectionResult = undefined;
+  isPointerInsideSelection = false;
+  popup.setAlwaysOnTop(true, "floating");
+  popup.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  popup.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  popup.webContents.on("page-title-updated", (event) => event.preventDefault());
+  popup.webContents.on("will-navigate", (event) => event.preventDefault());
+  const close = () => { if (!popup.isDestroyed()) popup.close(); };
+  popup.once("ready-to-show", () => {
+    popup.show();
+    app.focus({ steal: true });
+    popup.focus();
+    popup.webContents.focus();
+  });
+  popup.on("focus", () => popup.webContents.focus());
+  popup.on("blur", () => { if (popup.isVisible()) close(); });
+  parent.on("hide", close);
+  const closeOnMove = () => {
+    const current = parent.getBounds();
+    if (current.x !== bounds.x || current.y !== bounds.y) close();
+  };
+  parent.on("move", closeOnMove);
+  return new Promise((resolve, reject) => {
+    popup.once("closed", () => {
+      parent.removeListener("hide", close);
+      parent.removeListener("move", closeOnMove);
+      const result = selectionResult;
+      selectionWindow = undefined;
+      selectionOptions = undefined;
+      selectionResult = undefined;
+      isPointerInsideSelection = false;
+      resolve(result);
     });
+    const load = MAIN_WINDOW_VITE_DEV_SERVER_URL
+      ? popup.loadURL(`${MAIN_WINDOW_VITE_DEV_SERVER_URL}?selection=1`)
+      : popup.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`), { query: { selection: "1" } });
+    void load.catch((error) => { reject(error); close(); });
   });
 }
 
 function registerIpcHandlers(): void {
   ipcMain.handle("catalog:get", () => getPiAgent().getCatalog());
-  ipcMain.handle("selection:provider", (_event, selectedId: string) =>
-    showSelectionMenu(getPiAgent().getCatalog().providers, selectedId));
-  ipcMain.handle("selection:model", (_event, providerId: string, selectedId: string) => {
+  ipcMain.handle("selection:provider", (_event, selectedId: string, anchor: SelectionAnchor) =>
+    showSelectionMenu({ title: "Provider", options: getPiAgent().getCatalog().providers, selectedId }, anchor));
+  ipcMain.handle("selection:model", (_event, providerId: string, selectedId: string, anchor: SelectionAnchor) => {
     const provider = getPiAgent().getCatalog().providers.find((entry) => entry.id === providerId);
-    return showSelectionMenu(provider?.models ?? [], selectedId);
+    return showSelectionMenu({ title: "Model", options: provider?.models ?? [], selectedId }, anchor);
+  });
+  ipcMain.handle("selection:options", (event) => {
+    if (event.sender !== selectionWindow?.webContents || !selectionOptions) throw new Error("No selection is open.");
+    return selectionOptions;
+  });
+  ipcMain.on("selection:choose", (event, id: string) => {
+    if (event.sender !== selectionWindow?.webContents || !selectionOptions?.options.some((option) => option.id === id)) return;
+    selectionResult = id;
+    selectionWindow?.close();
+  });
+  ipcMain.on("selection:cancel", (event) => {
+    if (event.sender === selectionWindow?.webContents) selectionWindow?.close();
   });
   ipcMain.handle("auth:login", async (_event, providerId: string, type: AuthType) => {
     await getPiAgent().login(providerId, type);
@@ -297,7 +357,22 @@ function togglePanel(): void {
 }
 
 function updatePanelHoverState(): void {
-  if (!panelWindow || panelWindow.isDestroyed() || selectionMenu) return;
+  if (selectionWindow && !selectionWindow.isDestroyed()) {
+    const popup = selectionWindow;
+    const bounds = popup.getBounds();
+    const cursor = screen.getCursorScreenPoint();
+    const isInside = popup.isVisible()
+      && cursor.x >= bounds.x && cursor.x < bounds.x + bounds.width
+      && cursor.y >= bounds.y && cursor.y < bounds.y + bounds.height;
+    if (isInside && !isPointerInsideSelection) {
+      app.focus({ steal: true });
+      popup.focus();
+      popup.webContents.focus();
+    }
+    isPointerInsideSelection = isInside;
+    return;
+  }
+  if (!panelWindow || panelWindow.isDestroyed()) return;
   const bounds = panelWindow.getBounds();
   const cursor = screen.getCursorScreenPoint();
   const isHovered = panelWindow.isVisible()

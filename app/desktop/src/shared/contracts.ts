@@ -20,10 +20,20 @@ export type {
   ProviderOption,
 } from "@side/pi-agent";
 
+export interface SelectionAnchor { x: number; y: number; width: number; height: number }
+export interface SelectionOptions {
+  title: string;
+  options: { id: string; name: string }[];
+  selectedId: string;
+}
+
 export interface SideApi {
   getCatalog(): Promise<ProviderCatalog>;
-  showProviderMenu(selectedId: string): Promise<string | undefined>;
-  showModelMenu(providerId: string, selectedId: string): Promise<string | undefined>;
+  showProviderMenu(selectedId: string, anchor: SelectionAnchor): Promise<string | undefined>;
+  showModelMenu(providerId: string, selectedId: string, anchor: SelectionAnchor): Promise<string | undefined>;
+  getSelectionOptions(): Promise<SelectionOptions>;
+  chooseSelection(id: string): void;
+  cancelSelection(): void;
   sendMessage(request: ChatSendRequest): void;
   stopMessage(requestId: string): void;
   login(providerId: string, type: AuthType): Promise<void>;
