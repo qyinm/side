@@ -1,7 +1,7 @@
 {
   "name": "side-panel",
   "productName": "Side",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A macOS-first, Dock-adjacent chat panel for Pi-supported models.",
   "main": ".vite/build/main.js",
   "private": true,

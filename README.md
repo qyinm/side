@@ -18,7 +18,7 @@ Bring your own provider account or API key. Side uses [Pi](https://github.com/ea
 
 ## Get Side
 
-Side is in early development. A public Mac download is being prepared; for now, run it from source using the instructions below. Final minimum macOS requirements and supported release architectures have not been established.
+Download the latest Apple Silicon Mac installer from [GitHub Releases](https://github.com/qyinm/side/releases/latest), open the DMG, and drag Side into Applications. Releases are Developer ID signed; Apple notarization is not configured yet, so Gatekeeper may block installation. Installed release builds check for updates at startup and hourly, then prompt you to restart when an update is ready. The minimum supported macOS version has not been verified.
 
 ## First launch
 
