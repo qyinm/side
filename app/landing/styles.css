@@ -480,13 +480,24 @@ h2 {
 }
 .shortcut-art,
 .model-art,
-.stream-art {
-  height: 115px;
+.writing-art {
+  height: 170px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .shortcut-art {
+  flex-direction: column;
+  gap: 8px;
+}
+.feature-mascot {
+  width: 110px;
+  height: 110px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.shortcut-keys {
+  display: flex;
   gap: 7px;
 }
 .shortcut-art kbd {
@@ -508,16 +519,19 @@ h2 {
 }
 .model-art {
   flex-direction: column;
-  align-items: stretch;
-  width: 170px;
+  width: 100%;
   margin: auto;
-  gap: 4px;
-  padding-top: 16px;
+  gap: 3px;
+}
+.model-art .feature-mascot {
+  width: 80px;
+  height: 80px;
 }
 .model-art > span {
+  width: min(170px, 100%);
   font-size: 11px;
   background: #fff8;
-  padding: 7px 12px;
+  padding: 5px 12px;
   border: 1px solid #dddae8;
   border-radius: 5px;
 }
@@ -526,31 +540,18 @@ h2 {
   font-weight: 500;
   color: #697755;
 }
-.stream-art {
-  position: relative;
+.writing-art {
   flex-direction: column;
-  align-items: flex-start;
-  padding: 20px 30px;
+  gap: 3px;
 }
-.stream-art > span:first-child {
-  font-size: 13px;
-  font-weight: 550;
-  margin-bottom: 16px;
+.writing-art img {
+  width: 150px;
+  height: 150px;
+  object-fit: contain;
 }
-.stream-line {
-  width: 90%;
-  height: 5px;
-  border-radius: 10px;
-  background: #cdd1bf;
-  margin-bottom: 8px;
-}
-.stream-line.short {
-  width: 60%;
-}
-.stream-cursor {
-  height: 13px;
-  width: 2px;
-  background: #88966d;
+.writing-art > span {
+  font-size: 9px;
+  color: var(--muted);
 }
 .demo-section {
   background: #e9ecdf;
@@ -1039,22 +1040,6 @@ dialog .eyebrow {
     font-size: 13px;
     max-width: 450px;
   }
-  .shortcut-art,
-  .model-art,
-  .stream-art {
-    height: 110px;
-  }
-  .shortcut-art {
-    justify-content: flex-start;
-    padding-left: 10px;
-  }
-  .model-art {
-    margin-left: 10px;
-  }
-  .stream-art {
-    padding-left: 10px;
-    width: 230px;
-  }
   .demo-section {
     padding-block: 55px;
   }
@@ -1083,8 +1068,20 @@ dialog .eyebrow {
     gap: 22px;
     padding-block: 65px;
   }
+  .faq > div:first-child {
+    position: relative;
+  }
+  .faq h2 {
+    padding-right: 90px;
+    font-size: 32px;
+  }
   .faq-mascot {
-    display: none;
+    position: absolute;
+    right: 0;
+    top: 35px;
+    width: 90px;
+    height: 90px;
+    margin: 0;
   }
   .faq-items summary {
     font-size: 13px;
