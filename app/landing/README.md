@@ -25,11 +25,11 @@ The build disables Docker discovery using `WRANGLER_DOCKER_BIN=false`: this asse
 
 Copy `.env.example` to `.env.local` in this workspace and set:
 
-- `VITE_DOWNLOAD_URL`: the public Mac download URL. Without a valid HTTP(S) URL, Get Side opens an honest release-preparation dialog.
+- `VITE_DOWNLOAD_URL`: optional override for the public Mac download URL. By default, all three download links point to the signed, notarized Side 1.0.2 Apple Silicon DMG and work without JavaScript. Update these default links when publishing a new release.
 - `VITE_PRODUCT_HUNT_URL`: the published Product Hunt listing URL. The listing link stays hidden until configured.
 
-Rebuild after changing these values. Do not point the public CTA at the private GitHub repository.
+Rebuild after changing these values. The download must point to a publicly accessible installer.
 
-Before launching the installer, confirm its architecture and minimum macOS version, update the compatibility FAQ, and replace any release-preparation text that is no longer accurate. The canonical URL and social image URLs use `https://side.qyinm.xyz`. `public/social-card.png` is the 1200 × 630 sharing image; the editable source is `public/social-card.svg`.
+The installer targets Apple Silicon. The minimum supported macOS version has not yet been verified. The canonical URL and social image URLs use `https://side.qyinm.xyz`. `public/social-card.png` is the 1200 × 630 sharing image; the editable source is `public/social-card.svg`.
 
 The interactive conversation is explicitly a canned demo; it sends no prompts to an AI service and collects no visitor data. The UI scene is marked as an illustrative preview. Google Fonts loads DM Sans and Manrope with system sans-serif fallbacks.

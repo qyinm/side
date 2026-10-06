@@ -53,9 +53,9 @@
       <nav aria-label="Main navigation">
         <a href="#how-it-works">How it works</a
         ><a href="#questions">Questions</a
-        ><button class="button button-small" data-download>
+        ><a class="button button-small" data-download href="https://github.com/qyinm/side/releases/download/v1.0.2/Side-1.0.2-arm64.dmg">
           Get Side <span aria-hidden="true">↗</span>
-        </button>
+        </a>
       </nav>
     </header>
     <main id="main">
@@ -73,14 +73,14 @@
             A chat panel beside your Dock, ready when you are.
           </p>
           <div class="hero-actions">
-            <button class="button" data-download>
-              <span aria-hidden="true">↓</span> Get Side for Mac</button
+            <a class="button" data-download href="https://github.com/qyinm/side/releases/download/v1.0.2/Side-1.0.2-arm64.dmg">
+              <span aria-hidden="true">↓</span> Get Side for Mac</a
             ><a class="text-link" href="#try-side"
               >Meet your new sidekick <span aria-hidden="true">↗</span></a
             >
           </div>
           <p class="platform-note">
-            Made for macOS <span aria-hidden="true">·</span> Bring your own AI
+            Apple Silicon <span aria-hidden="true">·</span> Bring your own AI
             provider
           </p>
         </div>
@@ -307,16 +307,17 @@
             <p>
               Your prompts are sent to your selected AI provider for a response.
               Provider credentials are stored in Side's local app data. The
-              current version keeps one conversation in memory; it doesn't save
-              chat history after you quit.
+              conversations and model settings are saved locally, so you can
+              resume a chat from history or start a new session.
             </p>
           </details>
           <details>
             <summary>Which Macs can use it?</summary>
             <p>
-              The current packaged build targets Apple Silicon Macs. Side is
-              still in early development; final minimum macOS requirements and
-              installation instructions will accompany the public release.
+              The download is for Apple Silicon Macs. Open the DMG and drag Side
+              into Applications. The app and installer are signed and Apple
+              notarized. The minimum supported macOS version is still being
+              verified.
             </p>
           </details>
         </div>
@@ -324,9 +325,9 @@
       <section class="closing wrap">
         <p class="eyebrow">GOOD COMPANY FOR YOUR NEXT IDEA.</p>
         <h2>A little closer.<br />A little easier.</h2>
-        <button class="button" data-download>
+        <a class="button" data-download href="https://github.com/qyinm/side/releases/download/v1.0.2/Side-1.0.2-arm64.dmg">
           <span aria-hidden="true">↓</span> Get Side for Mac
-        </button>
+        </a>
         <p>One small space for your favorite AI models.</p>
         <a class="product-hunt-link" id="product-hunt-link" hidden
           >Meet Side on Product Hunt <span aria-hidden="true">↗</span></a
@@ -339,22 +340,6 @@
       ><span>A little AI. By your side.</span
       ><span>Made for Mac. Built with care.</span>
     </footer>
-    <dialog id="release-dialog" aria-labelledby="release-title">
-      <button class="dialog-close" aria-label="Close release information">
-        ×</button
-      ><img src="/side-ghost-icon.png" alt="" width="82" height="82" />
-      <p class="eyebrow">ALMOST BY YOUR SIDE</p>
-      <h2 id="release-title">We're getting ready.</h2>
-      <p>
-        The public Mac download is being prepared. Come back here for the
-        release and installation details.
-      </p>
-      <p class="release-note">
-        Early access · Apple Silicon<br />Requires your own supported AI
-        provider.
-      </p>
-      <button class="button dialog-dismiss">Got it</button>
-    </dialog>
     <script type="module" src="/src.js"></script>
   </body>
 </html>

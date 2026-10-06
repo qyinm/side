@@ -12,35 +12,11 @@ function publicUrl(value) {
 
 const downloadUrl = publicUrl(import.meta.env.VITE_DOWNLOAD_URL);
 const productHuntUrl = publicUrl(import.meta.env.VITE_PRODUCT_HUNT_URL);
-const dialog = document.querySelector("#release-dialog");
-
-document.querySelectorAll("[data-download]").forEach((button) => {
-  if (downloadUrl) {
-    const link = document.createElement("a");
-    link.className = button.className;
-    link.innerHTML = button.innerHTML;
+if (downloadUrl) {
+  document.querySelectorAll("[data-download]").forEach((link) => {
     link.href = downloadUrl;
-    button.replaceWith(link);
-  } else {
-    button.addEventListener("click", () => dialog.showModal());
-  }
-});
-
-document
-  .querySelectorAll(".dialog-close, .dialog-dismiss")
-  .forEach((button) => {
-    button.addEventListener("click", () => dialog.close());
   });
-dialog.addEventListener("click", (event) => {
-  const bounds = dialog.getBoundingClientRect();
-  if (
-    event.clientX < bounds.left ||
-    event.clientX > bounds.right ||
-    event.clientY < bounds.top ||
-    event.clientY > bounds.bottom
-  )
-    dialog.close();
-});
+}
 
 if (productHuntUrl) {
   const link = document.querySelector("#product-hunt-link");
