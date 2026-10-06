@@ -1,0 +1,56 @@
+name: Update Pi
+
+on:
+  schedule:
+    # 09:00 Asia/Seoul; scheduled runs may be delayed by GitHub.
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-pi
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Update both Pi packages
+        working-directory: packages/pi-agent
+        run: bun add @earendil-works/pi-ai@latest @earendil-works/pi-coding-agent@latest
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun test app/desktop/scripts/reasoning.test.ts app/desktop/scripts/sessions.test.ts
+      - run: bun run check:oauth-bundle
+      # GITHUB_TOKEN-created PRs do not trigger pull_request workflows.
+      # Run compatibility checks above before opening or updating the PR.
+      - name: Open or update the verified PR
+        uses: peter-evans/create-pull-request@v8.1.1
+        with:
+          branch: automation/update-pi
+          add-paths: |
+            packages/pi-agent/package.json
+            bun.lock
+          commit-message: "chore(pi): update bundled runtime dependencies"
+          title: "chore(pi): update bundled runtime dependencies"
+          body: |
+            Updates pi-ai and pi-coding-agent together using the repository's Bun version.
+
+            Typecheck, lint, session and reasoning tests, and bundled Codex OAuth passed before this PR was created or updated.
+            [Validation run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            Review and merge manually. Build a new app release to deliver these dependencies to installed apps.

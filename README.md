@@ -89,7 +89,7 @@ Sign-in and chat requests use your provider's network endpoints. Automatic netwo
 
 The desktop app uses Electron Forge, React, and TypeScript, with a Swift helper for Dock positioning. [`packages/pi-agent`](packages/pi-agent) wraps Pi's model and authentication APIs.
 
-Dependabot checks for new Pi versions daily at 09:00 Asia/Seoul and opens a grouped update PR for `pi-ai` and `pi-coding-agent`. CI checks types, lint, session and reasoning behavior, and bundled Codex OAuth. Review and merge passing PRs, then build a new app release to deliver the updated Pi runtime to installed apps. Pi packages are bundled with the app; they are not downloaded independently at runtime.
+The `Update Pi` GitHub Actions workflow checks for new Pi versions daily at 09:00 Asia/Seoul (GitHub may delay scheduled runs). It updates `pi-ai` and `pi-coding-agent` together using the repository's Bun version, checks types, lint, session and reasoning behavior, and bundled Codex OAuth, then opens or updates a PR with a link to the validation run. If checks fail, no updated PR is published. Review and merge passing PRs, then build a new app release to deliver the updated Pi runtime to installed apps. Pi packages are bundled with the app; they are not downloaded independently at runtime.
 
 See [Desktop development and architecture](app/desktop/README.md) for more details.
 
