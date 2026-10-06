@@ -18,7 +18,7 @@ Bring your own provider account or API key. Side uses [Pi](https://github.com/ea
 
 ## Get Side
 
-Download the latest Apple Silicon Mac installer from [GitHub Releases](https://github.com/qyinm/side/releases/latest), open the DMG, and drag Side into Applications. Releases are Developer ID signed; Apple notarization is not configured yet, so Gatekeeper may block installation. Installed release builds check for updates at startup and hourly, then prompt you to restart when an update is ready. The minimum supported macOS version has not been verified.
+Download the latest Apple Silicon Mac installer from [GitHub Releases](https://github.com/qyinm/side/releases/latest), open the DMG, and drag Side into Applications. Starting with 1.0.2, public release apps and DMGs are Developer ID signed and Apple notarized, with stapled notarization tickets. Installed release builds check for updates at startup and hourly, then prompt you to restart when an update is ready. The minimum supported macOS version has not been verified.
 
 ## First launch
 
@@ -85,7 +85,7 @@ Sign-in and chat requests use your provider's network endpoints. Automatic netwo
 - No external coding-agent or CLI sessions are launched.
 - Provider availability and authentication support depend on Pi.
 - Reasoning effort choices depend on the selected model's supported levels.
-- Developer ID signing is configured; notarization and public installer verification remain unfinished.
+- Installation through Electron's automatic updater has not yet been verified end to end.
 
 ## Development notes
 
