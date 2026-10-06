@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: daily
+      time: "09:00"
+      timezone: Asia/Seoul
+    allow:
+      - dependency-name: "@earendil-works/pi-ai"
+      - dependency-name: "@earendil-works/pi-coding-agent"
+    groups:
+      pi:
+        patterns:
+          - "@earendil-works/pi-ai"
+          - "@earendil-works/pi-coding-agent"
+    open-pull-requests-limit: 1
