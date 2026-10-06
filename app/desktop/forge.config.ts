@@ -9,16 +9,27 @@ import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
 const execFileAsync = promisify(execFile);
+const notarizationProfile = process.env.SIDE_NOTARY_PROFILE;
+const notarizationKeychain = process.env.SIDE_NOTARY_KEYCHAIN;
+const signingIdentity = process.env.SIDE_SIGNING_IDENTITY;
+
+if (notarizationProfile && !signingIdentity) {
+  throw new Error('SIDE_SIGNING_IDENTITY is required for notarized builds.');
+}
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     appBundleId: 'com.electron.side',
     osxSign: {
-      identity: process.env.SIDE_SIGNING_IDENTITY,
+      identity: signingIdentity,
       // These are resources sealed by their bundle, not executable code.
       ignore: '\\.(?:pak|asar|bin|dat|icns|car)$',
     },
+    osxNotarize: notarizationProfile ? {
+      keychainProfile: notarizationProfile,
+      keychain: notarizationKeychain,
+    } : undefined,
     icon: path.resolve(__dirname, '../../desktop-app-icon.icon'),
     extraResource: [
       path.join(__dirname, 'native', 'dock-geometry'),
@@ -34,6 +45,34 @@ const config: ForgeConfig = {
           '--verify', '--deep', '--strict',
           path.join(outputPath, 'Side.app'),
         ]);
+        if (notarizationProfile) {
+          await execFileAsync('xcrun', ['stapler', 'validate', path.join(outputPath, 'Side.app')]);
+        }
+      }
+    },
+    postMake: async (_config, results) => {
+      if (!notarizationProfile || !signingIdentity) return;
+      for (const result of results) {
+        if (result.platform !== 'darwin') continue;
+        for (const artifact of result.artifacts) {
+          if (!artifact.endsWith('.dmg')) continue;
+          console.log(`Signing and notarizing ${path.basename(artifact)}...`);
+          await execFileAsync('codesign', ['--force', '--sign', signingIdentity, '--timestamp', artifact]);
+          const submission = await execFileAsync('xcrun', [
+            'notarytool', 'submit', artifact, '--keychain-profile', notarizationProfile,
+            ...(notarizationKeychain ? ['--keychain', notarizationKeychain] : []),
+            '--wait', '--output-format', 'json',
+          ]);
+          const { status, id } = JSON.parse(submission.stdout) as { status: string; id: string };
+          if (status !== 'Accepted') {
+            throw new Error(`DMG notarization ${status} (submission ${id}). Inspect it with xcrun notarytool log.`);
+          }
+          await execFileAsync('xcrun', ['stapler', 'staple', artifact]);
+          await execFileAsync('xcrun', ['stapler', 'validate', artifact]);
+          await execFileAsync('codesign', ['--verify', '--strict', artifact]);
+          await execFileAsync('hdiutil', ['verify', artifact]);
+          console.log(`DMG notarization accepted and ticket validated: ${id}`);
+        }
       }
     },
   },

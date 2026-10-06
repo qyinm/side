@@ -13,6 +13,7 @@
     "start": "bun run --filter side-panel start",
     "package": "bun run --filter side-panel package",
     "make": "bun run --filter side-panel make",
+    "release:mac": "bun app/desktop/scripts/release-mac.mjs",
     "lint": "bun run --filter side-panel lint",
     "typecheck": "bun run --filter side-panel typecheck"
   },

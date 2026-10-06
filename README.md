@@ -68,6 +68,8 @@ bun run make
 
 Electron Forge writes packaged apps to `app/desktop/out/` and distributables to `app/desktop/out/make/`. The current packaging configuration uses the Icon Composer asset in [`desktop-app-icon.icon`](desktop-app-icon.icon), which requires macOS 26+ and Xcode 26+. An `.icns` fallback is needed to show the custom icon on earlier macOS versions. These are packaging requirements; the minimum macOS version for running the app has not been verified.
 
+For a notarized public release, register Apple credentials in Keychain and use `bun run release:mac`. See [macOS release instructions](docs/macos-release.md). The release command refuses to build without valid notarization authentication.
+
 ## Data and permissions
 
 Side keeps provider credentials and model configuration in `pi/` inside Electron's app-specific user data directory. The Pi runtime uses local files including `auth.json` and `models.json`; these are separate from another Pi installation's configuration.
