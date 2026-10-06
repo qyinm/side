@@ -316,35 +316,45 @@ export function App() {
           />
           <PromptInputFooter className="composer-controls">
             <div className="composer-model-controls">
-              <label className="composer-provider-select">
-                <span className="sr-only">Provider</span>
-                <select
-                  value={selectedProvider?.id ?? ""}
-                  onChange={(event) => {
-                    const nextProvider = catalog?.providers.find((provider) => provider.id === event.target.value);
-                    if (nextProvider?.models[0]) setSelectedModelId(getModelKey(nextProvider.models[0]));
-                  }}
-                  disabled={!catalog?.providers.length || Boolean(streamingId)}
-                >
-                  {catalog?.providers.map((provider) => (
-                    <option key={provider.id} value={provider.id}>{provider.name}</option>
-                  ))}
-                </select>
+              <button
+                type="button"
+                className="composer-provider-select"
+                aria-label="Provider"
+                aria-haspopup="menu"
+                disabled={!catalog?.providers.length || Boolean(streamingId) || Boolean(activeProviderId)}
+                onClick={async () => {
+                  try {
+                    const providerId = await window.side.showProviderMenu(selectedProvider?.id ?? "");
+                    const provider = catalog?.providers.find((entry) => entry.id === providerId);
+                    if (provider?.models[0]) setSelectedModelId(getModelKey(provider.models[0]));
+                  } catch (error) {
+                    setErrorMessage(error instanceof Error ? error.message : "Could not open provider menu.");
+                  }
+                }}
+              >
+                <span>{selectedProvider?.name ?? "Provider"}</span>
                 <ChevronDown aria-hidden="true" />
-              </label>
-              <label className="composer-model-select">
-                <span className="sr-only">Model</span>
-                <select
-                  value={selectedModel ? getModelKey(selectedModel) : ""}
-                  onChange={(event) => setSelectedModelId(event.target.value)}
-                  disabled={!selectedProvider?.models.length || Boolean(streamingId)}
-                >
-                  {selectedProvider?.models.map((model) => (
-                    <option key={getModelKey(model)} value={getModelKey(model)}>{formatModelName(model)}</option>
-                  ))}
-                </select>
+              </button>
+              <button
+                type="button"
+                className="composer-model-select"
+                aria-label="Model"
+                aria-haspopup="menu"
+                disabled={!selectedProvider?.models.length || Boolean(streamingId) || Boolean(activeProviderId)}
+                onClick={async () => {
+                  if (!selectedProvider) return;
+                  try {
+                    const modelId = await window.side.showModelMenu(selectedProvider.id, selectedModel?.id ?? "");
+                    const model = selectedProvider.models.find((entry) => entry.id === modelId);
+                    if (model) setSelectedModelId(getModelKey(model));
+                  } catch (error) {
+                    setErrorMessage(error instanceof Error ? error.message : "Could not open model menu.");
+                  }
+                }}
+              >
+                <span>{formatModelName(selectedModel)}</span>
                 <ChevronDown aria-hidden="true" />
-              </label>
+              </button>
               {selectedModel?.reasoning && <span className="reasoning-indicator" title="This model supports reasoning; effort level is not adjustable here">Reasoning</span>}
             </div>
             <PromptInputSubmit

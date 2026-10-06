@@ -22,6 +22,8 @@ export type {
 
 export interface SideApi {
   getCatalog(): Promise<ProviderCatalog>;
+  showProviderMenu(selectedId: string): Promise<string | undefined>;
+  showModelMenu(providerId: string, selectedId: string): Promise<string | undefined>;
   sendMessage(request: ChatSendRequest): void;
   stopMessage(requestId: string): void;
   login(providerId: string, type: AuthType): Promise<void>;

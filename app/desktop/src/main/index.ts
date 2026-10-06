@@ -7,6 +7,7 @@ import {
   BrowserWindow,
   globalShortcut,
   ipcMain,
+  Menu,
   screen,
   shell,
 } from "electron";
@@ -83,8 +84,40 @@ function isChatSendRequest(value: unknown): value is ChatSendRequest {
     && typeof request.text === "string";
 }
 
+let selectionMenu: Menu | undefined;
+
+function showSelectionMenu(options: { id: string; name: string }[], selectedId: string): Promise<string | undefined> {
+  if (!panelWindow || panelWindow.isDestroyed() || selectionMenu || !options.length) {
+    return Promise.resolve(undefined);
+  }
+  const window = panelWindow;
+  return new Promise((resolve) => {
+    let selected: string | undefined;
+    const menu = Menu.buildFromTemplate(options.map((option) => ({
+      label: option.name,
+      type: "radio" as const,
+      checked: option.id === selectedId,
+      click: () => { selected = option.id; },
+    })));
+    selectionMenu = menu;
+    menu.popup({
+      window,
+      callback: () => {
+        selectionMenu = undefined;
+        resolve(selected);
+      },
+    });
+  });
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle("catalog:get", () => getPiAgent().getCatalog());
+  ipcMain.handle("selection:provider", (_event, selectedId: string) =>
+    showSelectionMenu(getPiAgent().getCatalog().providers, selectedId));
+  ipcMain.handle("selection:model", (_event, providerId: string, selectedId: string) => {
+    const provider = getPiAgent().getCatalog().providers.find((entry) => entry.id === providerId);
+    return showSelectionMenu(provider?.models ?? [], selectedId);
+  });
   ipcMain.handle("auth:login", async (_event, providerId: string, type: AuthType) => {
     await getPiAgent().login(providerId, type);
     sendToPanel("catalog:updated", getPiAgent().getCatalog());
@@ -264,7 +297,7 @@ function togglePanel(): void {
 }
 
 function updatePanelHoverState(): void {
-  if (!panelWindow || panelWindow.isDestroyed()) return;
+  if (!panelWindow || panelWindow.isDestroyed() || selectionMenu) return;
   const bounds = panelWindow.getBounds();
   const cursor = screen.getCursorScreenPoint();
   const isHovered = panelWindow.isVisible()
