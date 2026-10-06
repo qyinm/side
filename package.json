@@ -2,12 +2,23 @@
   "name": "side",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@12.5.1",
+  "packageManager": "bun@1.4.0",
   "scripts": {
-    "start": "pnpm --filter side-panel start",
-    "package": "pnpm --filter side-panel package",
-    "make": "pnpm --filter side-panel make",
-    "lint": "pnpm --filter side-panel lint",
-    "typecheck": "pnpm --filter side-panel typecheck"
-  }
+    "start": "bun run --filter side-panel start",
+    "package": "bun run --filter side-panel package",
+    "make": "bun run --filter side-panel make",
+    "lint": "bun run --filter side-panel lint",
+    "typecheck": "bun run --filter side-panel typecheck"
+  },
+  "workspaces": [
+    "app/desktop",
+    "packages/pi-agent"
+  ],
+  "overrides": {
+    "@electron/rebuild>@electron/node-gyp": "10.2.0-electron.2"
+  },
+  "trustedDependencies": [
+    "electron",
+    "esbuild"
+  ]
 }

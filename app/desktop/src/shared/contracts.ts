@@ -34,6 +34,7 @@ export interface SideApi {
   onAuthPrompt(callback: (request: AuthPromptRequest) => void): () => void;
   onAuthEvent(callback: (notification: AuthEventNotification) => void): () => void;
   onPanelFocus(callback: () => void): () => void;
+  onPanelHover(callback: (hovered: boolean) => void): () => void;
 }
 
 declare global {

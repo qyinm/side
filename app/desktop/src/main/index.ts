@@ -19,6 +19,8 @@ const minimumPanelWidth = 180;
 const maximumPanelWidth = 560;
 const minimumExpandedPanelHeight = 480;
 const dockPanelGap = 0;
+const hoverRevealHeight = 22;
+const pollPanelHoverInterval = 60;
 const pollDockGeometryInterval = 1200;
 const execFileAsync = promisify(execFile);
 
@@ -35,6 +37,8 @@ let isQuitting = false;
 let dockGeometry: DockGeometry | null = null;
 let isReadingDockGeometry = false;
 let isPanelExpanded = false;
+let isPanelHovered = false;
+let isPointerInsidePanel = false;
 
 function getPiAgent(): PiAgent {
   if (!piAgent) throw new Error("Pi agent is not ready yet.");
@@ -106,6 +110,10 @@ function registerIpcHandlers(): void {
   ipcMain.on("panel:toggle-size", () => {
     isPanelExpanded = !isPanelExpanded;
     positionPanel();
+    updatePanelHoverState();
+  });
+  ipcMain.on("panel:hover-state:get", (event) => {
+    event.sender.send("panel:hover-state", isPanelHovered);
   });
 }
 
@@ -174,8 +182,8 @@ function positionPanel(): void {
   if (orientation === "bottom" && dockRect) {
     const leftGap = Math.max(0, dockRect.x - bounds.x);
     const rightGap = Math.max(0, bounds.x + bounds.width - dockRect.x - dockRect.width);
-    const useRightGap = rightGap >= leftGap;
-    const availableSideWidth = (useRightGap ? rightGap : leftGap) - dockPanelGap;
+      const useRightGap = rightGap >= leftGap;
+      const availableSideWidth = (useRightGap ? rightGap : leftGap) - dockPanelGap;
 
     if (availableSideWidth >= minimumPanelWidth) {
       widthToUse = Math.min(availableSideWidth, maximumPanelWidth);
@@ -187,10 +195,8 @@ function positionPanel(): void {
       const collapsedPanelHeight = Math.min(dockHeight + 4, bounds.height);
       heightToUse = isPanelExpanded
         ? Math.max(dockHeight, dockBottom - bounds.y)
-        : collapsedPanelHeight;
-      panelY = isPanelExpanded
-        ? dockBottom - heightToUse
-        : dockBottom - collapsedPanelHeight;
+        : Math.min(collapsedPanelHeight + hoverRevealHeight, bounds.height);
+      panelY = dockBottom - heightToUse;
       panelWindow.setMinimumSize(
         minimumPanelWidth,
         isPanelExpanded ? Math.min(minimumExpandedPanelHeight, heightToUse) : heightToUse,
@@ -198,7 +204,10 @@ function positionPanel(): void {
       panelWindow.setMaximumSize(maximumPanelWidth, bounds.height);
       isDockAligned = true;
     } else {
-      heightToUse = Math.min(panelHeight, Math.max(1, dockRect.y - workArea.y));
+      heightToUse = Math.min(
+        panelHeight + hoverRevealHeight,
+        Math.max(1, dockRect.y - workArea.y + hoverRevealHeight),
+      );
       panelY = dockRect.y - heightToUse;
       panelWindow.setMinimumSize(
         minimumPanelWidth,
@@ -213,6 +222,11 @@ function positionPanel(): void {
     heightToUse = panelHeight;
   }
 
+  if (isPanelExpanded) {
+    heightToUse = Math.max(1, workArea.height);
+    panelY = workArea.y;
+  }
+
   panelX = Math.min(Math.max(panelX, bounds.x), bounds.x + bounds.width - widthToUse);
   if (!isDockAligned) {
     panelY = Math.min(
@@ -220,13 +234,21 @@ function positionPanel(): void {
       workArea.y + workArea.height - heightToUse,
     );
   }
-  panelWindow.setHasShadow(isPanelExpanded || !isDockAligned);
-  panelWindow.setBounds({
+  const nextBounds = {
     x: Math.round(panelX),
     y: Math.round(panelY),
     width: widthToUse,
     height: heightToUse,
-  });
+  };
+  if (
+    currentBounds.x === nextBounds.x
+    && currentBounds.y === nextBounds.y
+    && currentBounds.width === nextBounds.width
+    && currentBounds.height === nextBounds.height
+  ) return;
+
+  panelWindow.setHasShadow(isPanelExpanded || !isDockAligned);
+  panelWindow.setBounds(nextBounds);
 }
 
 function togglePanel(): void {
@@ -239,6 +261,24 @@ function togglePanel(): void {
   panelWindow.show();
   panelWindow.focus();
   sendToPanel("panel:focus", undefined);
+}
+
+function updatePanelHoverState(): void {
+  if (!panelWindow || panelWindow.isDestroyed()) return;
+  const bounds = panelWindow.getBounds();
+  const cursor = screen.getCursorScreenPoint();
+  const isHovered = panelWindow.isVisible()
+    && cursor.x >= bounds.x
+    && cursor.x < bounds.x + bounds.width
+    && cursor.y >= bounds.y
+    && cursor.y < bounds.y + bounds.height;
+  if (isHovered && !isPointerInsidePanel) app.focus({ steal: true });
+  if (isHovered && !panelWindow.isFocused()) panelWindow.focus();
+  isPointerInsidePanel = isHovered;
+  const shouldRevealControls = isHovered || isPanelExpanded;
+  if (shouldRevealControls === isPanelHovered) return;
+  isPanelHovered = shouldRevealControls;
+  sendToPanel("panel:hover-state", isPanelHovered);
 }
 
 function createPanel(): void {
@@ -256,7 +296,9 @@ function createPanel(): void {
     maxHeight: 1600,
     hasShadow: true,
     skipTaskbar: true,
-    ...(process.platform === "darwin" ? { type: "panel" as const } : {}),
+    ...(process.platform === "darwin"
+      ? { type: "panel" as const, acceptFirstMouse: true }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, "index.js"),
       contextIsolation: true,
@@ -315,6 +357,7 @@ void app.whenReady().then(async () => {
   registerIpcHandlers();
   await refreshDockGeometry(true);
   createPanel();
+  setInterval(updatePanelHoverState, pollPanelHoverInterval);
   setInterval(() => void refreshDockGeometry(), pollDockGeometryInterval);
   screen.on("display-metrics-changed", positionPanel);
   screen.on("display-added", positionPanel);

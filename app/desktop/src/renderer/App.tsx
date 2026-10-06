@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+} from "../components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "../components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "../components/ai-elements/prompt-input";
+import { ArrowUp, ChevronDown, ChevronUp } from "lucide-react";
 import type {
   AuthPrompt,
   AuthEventNotification,
@@ -38,6 +54,7 @@ function describeAuthEvent(event: AuthEventNotification["event"]): string {
 }
 
 export function App() {
+  const [isPanelHovered, setIsPanelHovered] = useState(false);
   const [catalog, setCatalog] = useState<ProviderCatalog>();
   const [selectedModelId, setSelectedModelId] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -47,8 +64,8 @@ export function App() {
   const [authPrompt, setAuthPrompt] = useState<AuthPromptRequest>();
   const [authNotice, setAuthNotice] = useState<AuthEventNotification>();
   const [errorMessage, setErrorMessage] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const didTogglePanelOnPress = useRef(false);
 
   const models = catalog?.models ?? [];
   const selectedModel = useMemo(
@@ -101,12 +118,10 @@ export function App() {
   }, [refreshCatalog]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
     return window.side.onPanelFocus(() => inputRef.current?.focus());
   }, []);
+
+  useEffect(() => window.side.onPanelHover(setIsPanelHovered), []);
 
   function handleChatEvent(event: ChatEvent): void {
     if (event.type === "delta") {
@@ -192,8 +207,8 @@ export function App() {
     setAuthPrompt(undefined);
   }
 
-  function sendMessage(): void {
-    const text = draft.trim();
+  function sendMessage(messageText = draft): void {
+    const text = messageText.trim();
     if (!text || !selectedModel || streamingId) return;
     const requestId = crypto.randomUUID();
     setErrorMessage("");
@@ -208,64 +223,15 @@ export function App() {
     });
   }
 
-  function submitOnEnter(event: KeyboardEvent<HTMLTextAreaElement>): void {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      sendMessage();
-    }
-  }
-
-  function clearConversation(): void {
-    if (streamingId) window.side.stopMessage(streamingId);
-    setMessages([]);
-    setStreamingId(undefined);
-  }
-
   return (
-    <main className="panel-shell">
+    <main className={`panel-shell${isPanelHovered ? " panel-shell--hovered" : ""}`}>
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true"><span /></div>
         <div className="brand-copy">
           <span className="brand-name">side</span>
           <span className="brand-caption">ONE CHAT · ANY MODEL</span>
         </div>
-        <button className="icon-button new-chat-button" title="New conversation" onClick={clearConversation}>
-          <span aria-hidden="true">＋</span>
-        </button>
       </header>
-
-      <section className="model-row" aria-label="Model selection">
-        <label className="select-wrap provider-select-wrap">
-          <span className="sr-only">Provider</span>
-          <select
-            value={selectedProvider?.id ?? ""}
-            onChange={(event) => {
-              const nextProvider = catalog?.providers.find((provider) => provider.id === event.target.value);
-              if (nextProvider?.models[0]) setSelectedModelId(getModelKey(nextProvider.models[0]));
-            }}
-            disabled={!catalog?.providers.length || Boolean(streamingId)}
-          >
-            {catalog?.providers.map((provider) => (
-              <option key={provider.id} value={provider.id}>{provider.name}</option>
-            ))}
-          </select>
-          <span className="select-chevron" aria-hidden="true">⌄</span>
-        </label>
-        <label className="select-wrap model-select-wrap">
-          <span className="sr-only">Model</span>
-          <select
-            value={selectedModel ? getModelKey(selectedModel) : ""}
-            onChange={(event) => setSelectedModelId(event.target.value)}
-            disabled={!selectedProvider?.models.length || Boolean(streamingId)}
-          >
-            {selectedProvider?.models.map((model) => (
-              <option key={getModelKey(model)} value={getModelKey(model)}>{formatModelName(model)}</option>
-            ))}
-          </select>
-          <span className="select-chevron" aria-hidden="true">⌄</span>
-        </label>
-        <span className={`connection-dot ${selectedProvider?.configured ? "is-connected" : ""}`} title={selectedProvider?.configured ? "Connected" : "Not connected"} />
-      </section>
 
       {selectedProvider && !selectedProvider.configured && (
         <ProviderConnectCard
@@ -275,31 +241,35 @@ export function App() {
         />
       )}
 
-      <section className="conversation" ref={scrollRef} aria-live="polite">
+      <Conversation className="conversation" aria-live="polite">
         {messages.length === 0 ? (
-          <div className="empty-state">
+          <ConversationEmptyState className="empty-state">
             <div className="empty-orbit"><span /><span /><span /></div>
             <h1>What’s on your mind?</h1>
             <p>One calm space for the models you already use.</p>
             {!selectedProvider?.configured && <span className="empty-hint">Connect a provider to start chatting</span>}
-          </div>
+          </ConversationEmptyState>
         ) : (
-          <div className="message-list">
+          <ConversationContent className="message-list">
             {messages.map((message) => (
-              <article className={`message message-${message.role}`} key={message.id}>
+              <Message className="chat-message" from={message.role} key={message.id}>
                 {message.role === "assistant" && <span className="assistant-mark" aria-hidden="true">s</span>}
-                <div className="message-content">{message.content || (streamingId === message.id ? <span className="typing-indicator"><i /><i /><i /></span> : "")}</div>
-              </article>
+                <MessageContent className="chat-message-content">
+                  {message.content
+                    ? <MessageResponse>{message.content}</MessageResponse>
+                    : streamingId === message.id && <span className="typing-indicator"><i /><i /><i /></span>}
+                </MessageContent>
+              </Message>
             ))}
             {streamingId && !messages.some((message) => message.id === streamingId) && (
-              <article className="message message-assistant" key="pending-response">
+              <Message className="chat-message" from="assistant" key="pending-response">
                 <span className="assistant-mark" aria-hidden="true">s</span>
-                <div className="message-content"><span className="typing-indicator"><i /><i /><i /></span></div>
-              </article>
+                <MessageContent className="chat-message-content"><span className="typing-indicator"><i /><i /><i /></span></MessageContent>
+              </Message>
             )}
-          </div>
+          </ConversationContent>
         )}
-      </section>
+      </Conversation>
 
       {(errorMessage || authNotice) && (
         <div className={`notice ${errorMessage ? "notice-error" : ""}`}>
@@ -328,37 +298,92 @@ export function App() {
             </button>
           </div>
         )}
-        <div className="composer">
-          <textarea
+        <PromptInput
+          className="composer"
+          onSubmit={({ text }) => {
+            if (!streamingId) sendMessage(text);
+          }}
+        >
+          <PromptInputTextarea
             ref={inputRef}
+            className="composer-input"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={submitOnEnter}
-            placeholder={selectedModel ? `Message ${formatModelName(selectedModel)}…` : "Choose a model to get started"}
+            placeholder="Ask anything…"
             aria-label="Message"
             rows={1}
-            disabled={!selectedProvider?.configured || Boolean(activeProviderId)}
+            disabled={Boolean(activeProviderId)}
           />
-          {streamingId ? (
-            <button className="send-button stop-button" aria-label="Stop response" onClick={() => window.side.stopMessage(streamingId)}>
-              <span />
-            </button>
-          ) : (
-            <button className="send-button" aria-label="Send message" onClick={sendMessage} disabled={!draft.trim() || !selectedProvider?.configured}>
-              <span aria-hidden="true">↑</span>
-            </button>
-          )}
-          <button
-            className="resize-panel-button"
-            aria-label="Toggle panel size"
-            title="Toggle panel size"
-            onClick={() => window.side.togglePanelSize()}
-          >
-            <span aria-hidden="true">⤢</span>
-          </button>
-        </div>
+          <PromptInputFooter className="composer-controls">
+            <div className="composer-model-controls">
+              <label className="composer-provider-select">
+                <span className="sr-only">Provider</span>
+                <select
+                  value={selectedProvider?.id ?? ""}
+                  onChange={(event) => {
+                    const nextProvider = catalog?.providers.find((provider) => provider.id === event.target.value);
+                    if (nextProvider?.models[0]) setSelectedModelId(getModelKey(nextProvider.models[0]));
+                  }}
+                  disabled={!catalog?.providers.length || Boolean(streamingId)}
+                >
+                  {catalog?.providers.map((provider) => (
+                    <option key={provider.id} value={provider.id}>{provider.name}</option>
+                  ))}
+                </select>
+                <ChevronDown aria-hidden="true" />
+              </label>
+              <label className="composer-model-select">
+                <span className="sr-only">Model</span>
+                <select
+                  value={selectedModel ? getModelKey(selectedModel) : ""}
+                  onChange={(event) => setSelectedModelId(event.target.value)}
+                  disabled={!selectedProvider?.models.length || Boolean(streamingId)}
+                >
+                  {selectedProvider?.models.map((model) => (
+                    <option key={getModelKey(model)} value={getModelKey(model)}>{formatModelName(model)}</option>
+                  ))}
+                </select>
+                <ChevronDown aria-hidden="true" />
+              </label>
+              {selectedModel?.reasoning && <span className="reasoning-indicator" title="This model supports reasoning; effort level is not adjustable here">Reasoning</span>}
+            </div>
+            <PromptInputSubmit
+              className="send-button"
+              status={streamingId ? "streaming" : "ready"}
+              onStop={() => { if (streamingId) window.side.stopMessage(streamingId); }}
+              disabled={!streamingId && (!draft.trim() || !selectedProvider?.configured)}
+            ><ArrowUp aria-hidden="true" /></PromptInputSubmit>
+          </PromptInputFooter>
+        </PromptInput>
         <div className="composer-hint"><span>↵ send</span><span>⇧ ↵ new line</span></div>
       </footer>
+
+      <button
+        className="panel-expand-control"
+        type="button"
+        aria-label="Toggle panel size"
+        title="Toggle panel size"
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.stopPropagation();
+          didTogglePanelOnPress.current = true;
+          window.side.togglePanelSize();
+        }}
+        onMouseDown={(event) => {
+          if (event.button !== 0 || didTogglePanelOnPress.current) return;
+          event.stopPropagation();
+          didTogglePanelOnPress.current = true;
+          window.side.togglePanelSize();
+        }}
+        onClick={(event) => {
+          if (event.detail === 0 || !didTogglePanelOnPress.current) {
+            window.side.togglePanelSize();
+          }
+          didTogglePanelOnPress.current = false;
+        }}
+      >
+        <ChevronUp aria-hidden="true" />
+      </button>
 
       {authPrompt && (
         <AuthPromptDialog

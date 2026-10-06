@@ -93,3 +93,5 @@ out/
 
 # Compiled macOS Dock geometry helper
 app/desktop/native/dock-geometry
+
+.agents/

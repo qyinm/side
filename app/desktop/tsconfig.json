@@ -10,7 +10,21 @@
     "noImplicitAny": true,
     "sourceMap": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/*"
+      ]
+    }
   },
-  "include": ["src", "forge.config.ts", "vite.*.config.ts", "forge.env.d.ts"]
+  "include": [
+    "src",
+    "forge.config.ts",
+    "vite.*.config.ts",
+    "vite.*.config.mts",
+    "forge.env.d.ts"
+  ]
 }

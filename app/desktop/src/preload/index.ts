@@ -31,6 +31,12 @@ const sideApi: SideApi = {
     ipcRenderer.on("panel:focus", listener);
     return () => ipcRenderer.removeListener("panel:focus", listener);
   },
+  onPanelHover(callback) {
+    const listener = (_event: Electron.IpcRendererEvent, hovered: boolean) => callback(hovered);
+    ipcRenderer.on("panel:hover-state", listener);
+    ipcRenderer.send("panel:hover-state:get");
+    return () => ipcRenderer.removeListener("panel:hover-state", listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("side", sideApi);

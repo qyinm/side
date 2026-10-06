@@ -4,12 +4,12 @@ A macOS-first, Dock-adjacent chat panel for models configured through Pi. Side u
 
 ## Development
 
-- Requires Node.js 22.19 or later for Pi's coding-agent package.
-- From the repository root, run `pnpm install` and `pnpm start`.
+- Requires Bun 1.4.0 and Node.js 22.19 or later for Pi's coding-agent package.
+- From the repository root, run `bun install` and `bun run start`.
 - Press `Command+Shift+Space` to toggle the panel.
 - On macOS, allow Side to use Accessibility when prompted so it can sit in the larger side gap beside a bottom Dock. It matches the Dock's height and vertical position; use the expand button in the composer to open the full chat panel.
-- Run `pnpm typecheck` and `pnpm package` from the repository root to verify/package the app.
-- Run `pnpm make` from the repository root to create a macOS ZIP distributable.
+- Run `bun run typecheck` and `bun run package` from the repository root to verify/package the app.
+- Run `bun run make` from the repository root to create a macOS ZIP distributable.
 
 Pi credentials and model configuration are isolated under the app's user data directory in `pi/`. The initial runtime starts with network model-catalog refresh disabled; provider sign-in and chat requests use the provider's network endpoints when explicitly invoked.
 
