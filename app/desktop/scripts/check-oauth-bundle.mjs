@@ -18,14 +18,20 @@ try {
   ], { encoding: 'utf8' }).stdout);
   await writeFile(entry, `
     import assert from 'node:assert/strict';
+    import { readFileSync } from 'node:fs';
     import { PiAgent } from ${JSON.stringify(agentPath)};
-    async function check() {
+    async function checkProvider(providerId) {
       let reachedAuthorization = false;
       const agent = await PiAgent.create({
         runtimeDirectory: ${JSON.stringify(path.join(directory, 'runtime'))},
         onEvent(event) {
           if (event.type === 'auth_event' && event.notification.event.type === 'auth_url') {
             assert.equal(new URL(event.notification.event.url).hostname, 'auth.openai.com');
+            if (providerId === 'openai') {
+              const id = readFileSync(${JSON.stringify(path.join(directory, 'runtime', 'installation-id'))}, 'utf8').trim();
+              assert.match(id, /^[0-9a-f-]{36}$/i);
+              assert.equal(new URL(event.notification.event.url).searchParams.get('ext_agent_host_id'), 'urn:uuid:' + id);
+            }
             reachedAuthorization = true;
           }
           if (event.type === 'auth_prompt') {
@@ -36,10 +42,17 @@ try {
         },
       });
       try {
-        await assert.rejects(agent.login('openai-codex', 'oauth'), /cancelled/i);
-        assert.ok(reachedAuthorization, 'Bundled Codex OAuth must reach the authorization flow');
+        await assert.rejects(agent.login(providerId, 'oauth'), /cancelled/i);
+        assert.ok(reachedAuthorization, 'Bundled ' + providerId + ' OAuth must reach the authorization flow');
       } finally { agent.dispose(); }
-      console.log('Bundled Codex OAuth reached authorization; cancelled without credentials.');
+      console.log('Bundled ' + providerId + ' OAuth reached authorization; cancelled without credentials.');
+    }
+    async function check() {
+      await checkProvider('openai-codex');
+      await checkProvider('openai');
+      const id = readFileSync(${JSON.stringify(path.join(directory, 'runtime', 'installation-id'))}, 'utf8');
+      await checkProvider('openai');
+      assert.equal(readFileSync(${JSON.stringify(path.join(directory, 'runtime', 'installation-id'))}, 'utf8'), id);
     }
     check().catch(error => { console.error(error); process.exitCode = 1; });
   `);

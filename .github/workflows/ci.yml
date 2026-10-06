@@ -28,5 +28,5 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
-      - run: bun test app/desktop/scripts/reasoning.test.ts app/desktop/scripts/sessions.test.ts
+      - run: bun test app/desktop/scripts/reasoning.test.ts app/desktop/scripts/sessions.test.ts app/desktop/scripts/installation.test.ts
       - run: bun run check:oauth-bundle

@@ -4,6 +4,7 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { SessionStore, type ChatSessionState } from "./sessions";
+import { getInstallationId } from "./installation";
 export type { ChatSessionState, ChatSessionSummary } from "./sessions";
 import type {
   AssistantMessage,
@@ -114,6 +115,7 @@ export class PiAgent {
     private readonly runtime: ModelRuntime,
     private readonly onEvent: PiAgentOptions["onEvent"],
     private readonly sessions: SessionStore,
+    private readonly runtimeDirectory: string,
   ) {}
 
   static async create(options: PiAgentOptions): Promise<PiAgent> {
@@ -128,7 +130,7 @@ export class PiAgent {
       refreshOnCreate: false,
     });
 
-    return new PiAgent(runtime, options.onEvent, new SessionStore(path.join(options.runtimeDirectory, "sessions.json")));
+    return new PiAgent(runtime, options.onEvent, new SessionStore(path.join(options.runtimeDirectory, "sessions.json")), options.runtimeDirectory);
   }
 
   getSessions(): ChatSessionState { return this.sessions.state(); }
@@ -184,7 +186,9 @@ export class PiAgent {
       throw new Error("This provider does not support OAuth.");
     }
 
-    await this.runtime.login(providerId, type, this.createAuthInteraction(providerId));
+    await this.runtime.login(providerId, type, this.createAuthInteraction(providerId), {
+      getDeviceId: () => getInstallationId(this.runtimeDirectory),
+    });
   }
 
   async logout(providerId: string): Promise<void> {

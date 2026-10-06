@@ -34,7 +34,7 @@ jobs:
         run: bun add @earendil-works/pi-ai@latest @earendil-works/pi-coding-agent@latest
       - run: bun run typecheck
       - run: bun run lint
-      - run: bun test app/desktop/scripts/reasoning.test.ts app/desktop/scripts/sessions.test.ts
+      - run: bun test app/desktop/scripts/reasoning.test.ts app/desktop/scripts/sessions.test.ts app/desktop/scripts/installation.test.ts
       - run: bun run check:oauth-bundle
       # GITHUB_TOKEN-created PRs do not trigger pull_request workflows.
       # Run compatibility checks above before opening or updating the PR.
@@ -50,7 +50,7 @@ jobs:
           body: |
             Updates pi-ai and pi-coding-agent together using the repository's Bun version.
 
-            Typecheck, lint, session and reasoning tests, and bundled Codex OAuth passed before this PR was created or updated.
+            Typecheck, lint, session, reasoning and installation ID tests, and bundled Codex and ChatGPT OAuth passed before this PR was created or updated.
             [Validation run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
 
             Review and merge manually. Build a new app release to deliver these dependencies to installed apps.
