@@ -20,6 +20,8 @@ xcrun notarytool history --keychain-profile side-notary
 
 If the profile is stored in a separate Keychain file, also set `SIDE_NOTARY_KEYCHAIN` to that file's path when building.
 
+If `store-credentials` returns HTTP 403 with a missing or expired agreement message, check the team's agreement and membership status in [Apple Developer](https://developer.apple.com/account/) and [App Store Connect](https://appstoreconnect.apple.com/business). The Account Holder must review required agreements. If registration is blocked, `--no-validate` can store the credentials for diagnosis, but it does not bypass Apple's authentication or notarization requirements. `release:mac` still checks authentication before building and reports Apple's error.
+
 ## Build and verify
 
 Increase `app/desktop/package.json`'s version for each public update, then run from the repository root:

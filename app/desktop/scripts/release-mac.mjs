@@ -12,7 +12,8 @@ const authentication = spawnSync('xcrun', [
   '--output-format', 'json',
 ], { encoding: 'utf8', timeout: 30000 });
 if (authentication.status !== 0) {
-  throw new Error('Apple notarization authentication failed. Check the Keychain profile with xcrun notarytool history before building.');
+  const detail = authentication.error?.message || authentication.stderr.trim() || 'No response from notarytool.';
+  throw new Error(`Apple notarization authentication failed: ${detail}`);
 }
 
 const build = spawnSync('bun', ['run', 'make'], { stdio: 'inherit' });
