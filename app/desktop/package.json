@@ -63,6 +63,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "streamdown": "^2.6.0",
+    "update-electron-app": "^3.3.0",
     "use-stick-to-bottom": "^1.1.6"
   }
 }

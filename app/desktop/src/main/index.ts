@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   app,
+  autoUpdater,
   BrowserWindow,
   globalShortcut,
   ipcMain,
@@ -12,6 +13,7 @@ import {
   systemPreferences,
 } from "electron";
 import { PiAgent } from "@side/pi-agent";
+import { updateElectronApp, UpdateSourceType } from "update-electron-app";
 import type { SelectionAnchor, SelectionOptions } from "../shared/contracts";
 import type { AuthType, ChatSendRequest, PiAgentEvent } from "@side/pi-agent";
 
@@ -480,6 +482,12 @@ function createPanel(): void {
   }
 }
 
+// Squirrel closes windows before app's before-quit; allow those closes instead
+// of hiding the panel and preventing the downloaded update from being installed.
+autoUpdater.on("before-quit-for-update", () => {
+  isQuitting = true;
+});
+
 app.on("before-quit", () => {
   isQuitting = true;
   piAgent?.dispose();
@@ -508,6 +516,14 @@ void app.whenReady().then(async () => {
   screen.on("display-added", positionPanel);
   screen.on("display-removed", positionPanel);
   globalShortcut.register("CommandOrControl+Shift+Space", togglePanel);
+
+  if (app.isPackaged && process.platform === "darwin") {
+    updateElectronApp({
+      updateSource: { type: UpdateSourceType.ElectronPublicUpdateService, repo: "qyinm/side" },
+      updateInterval: "1 hour",
+      notifyUser: true,
+    });
+  }
 
   app.on("activate", () => {
     if (!panelWindow) createPanel();
