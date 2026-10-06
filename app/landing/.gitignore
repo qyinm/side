@@ -1,0 +1,4 @@
+dist/
+.cloudflare/
+.env.local
+.env.*.local

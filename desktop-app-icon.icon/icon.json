@@ -3,7 +3,7 @@
     {
       "value" : {
         "linear-gradient" : [
-          "display-p3:0.86275,0.93333,1.00000,1.00000",
+          "srgb:0.86275,0.93333,1.00000,1.00000",
           "srgb:0.90980,0.88627,1.00000,1.00000"
         ]
       }
@@ -12,8 +12,8 @@
       "appearance" : "dark",
       "value" : {
         "linear-gradient" : [
-          "display-p3:0.04314,0.06275,0.12549,1.00000",
-          "srgb:0.10196,0.08235,0.18824,1.00000"
+          "display-p3:0.86275,0.93333,1.00000,1.00000",
+          "srgb:0.90980,0.88627,1.00000,1.00000"
         ]
       }
     }
@@ -22,14 +22,13 @@
     {
       "layers" : [
         {
-          "glass" : true,
-          "image-name" : "Image.png",
-          "name" : "Image",
+          "image-name" : "Image 2.png",
+          "name" : "Image 2",
           "position" : {
-            "scale" : 1,
+            "scale" : 0.7,
             "translation-in-points" : [
-              -99,
-              -1.5
+              0,
+              0
             ]
           }
         }

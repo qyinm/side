@@ -1,17 +1,38 @@
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
+const execFileAsync = promisify(execFile);
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    appBundleId: 'com.electron.side',
+    osxSign: {
+      identity: process.env.SIDE_SIGNING_IDENTITY,
+      // These are resources sealed by their bundle, not executable code.
+      ignore: '\\.(?:pak|asar|bin|dat|icns|car)$',
+    },
     icon: path.resolve(__dirname, '../../desktop-app-icon.icon'),
     extraResource: [path.join(__dirname, 'native', 'dock-geometry')],
   },
   rebuildConfig: {},
+  hooks: {
+    postPackage: async (_config, result) => {
+      if (result.platform !== 'darwin') return;
+      for (const outputPath of result.outputPaths) {
+        await execFileAsync('codesign', [
+          '--verify', '--deep', '--strict',
+          path.join(outputPath, 'Side.app'),
+        ]);
+      }
+    },
+  },
   makers: [
     new MakerZIP({}, ['darwin']),
   ],

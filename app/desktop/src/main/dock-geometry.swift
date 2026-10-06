@@ -75,10 +75,8 @@ func findDockList(in element: AXUIElement, depth: Int = 0) -> DockRect? {
   return nil
 }
 
-let arguments = Set(CommandLine.arguments.dropFirst())
-let promptForAccessibility = arguments.contains("--request-permission")
-let trustOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: promptForAccessibility] as CFDictionary
-let isTrusted = AXIsProcessTrustedWithOptions(trustOptions)
+// The host app owns permission requests. Polling this helper must stay silent.
+let isTrusted = AXIsProcessTrusted()
 let orientation = CFPreferencesCopyAppValue("orientation" as CFString, "com.apple.dock" as CFString) as? String
 let autoHide = CFPreferencesCopyAppValue("autohide" as CFString, "com.apple.dock" as CFString) as? Bool
 

@@ -9,13 +9,14 @@ import {
   ipcMain,
   screen,
   shell,
+  systemPreferences,
 } from "electron";
 import { PiAgent } from "@side/pi-agent";
 import type { SelectionAnchor, SelectionOptions } from "../shared/contracts";
 import type { AuthType, ChatSendRequest, PiAgentEvent } from "@side/pi-agent";
 
 const panelWidth = 430;
-const panelHeight = 650;
+const collapsedPanelHeight = 70;
 const minimumPanelWidth = 180;
 const maximumPanelWidth = 560;
 const minimumExpandedPanelHeight = 480;
@@ -216,13 +217,13 @@ function getDockHelperPath(): string {
     : path.join(app.getAppPath(), "native", "dock-geometry");
 }
 
-async function refreshDockGeometry(requestPermission = false): Promise<void> {
+async function refreshDockGeometry(): Promise<void> {
   if (process.platform !== "darwin" || isReadingDockGeometry) return;
   isReadingDockGeometry = true;
   try {
     const { stdout } = await execFileAsync(
       getDockHelperPath(),
-      requestPermission ? ["--request-permission"] : [],
+      [],
       { timeout: 2500 },
     );
     dockGeometry = JSON.parse(stdout) as DockGeometry;
@@ -265,7 +266,8 @@ function positionPanel(): void {
   const bounds = display.bounds;
   const currentBounds = panelWindow.getBounds();
   let widthToUse = currentBounds.width || panelWidth;
-  let heightToUse = currentBounds.height || panelHeight;
+  let heightToUse = collapsedPanelHeight;
+  let minimumHeight = 44;
   const orientation = getDockOrientation(display);
   const dockRect = dockGeometry?.dockRect;
 
@@ -275,8 +277,8 @@ function positionPanel(): void {
   if (orientation === "bottom" && dockRect) {
     const leftGap = Math.max(0, dockRect.x - bounds.x);
     const rightGap = Math.max(0, bounds.x + bounds.width - dockRect.x - dockRect.width);
-      const useRightGap = rightGap >= leftGap;
-      const availableSideWidth = (useRightGap ? rightGap : leftGap) - dockPanelGap;
+    const useRightGap = rightGap >= leftGap;
+    const availableSideWidth = (useRightGap ? rightGap : leftGap) - dockPanelGap;
 
     if (availableSideWidth >= minimumPanelWidth) {
       widthToUse = Math.min(availableSideWidth, maximumPanelWidth);
@@ -285,39 +287,31 @@ function positionPanel(): void {
         : dockRect.x - dockPanelGap - widthToUse;
       const dockHeight = Math.max(1, Math.min(dockRect.height, bounds.height));
       const dockBottom = bounds.y + bounds.height;
-      const collapsedPanelHeight = Math.min(dockHeight + 4, bounds.height);
+      const dockPanelHeight = Math.min(dockHeight + 4, bounds.height);
       heightToUse = isPanelExpanded
         ? Math.max(dockHeight, dockBottom - bounds.y)
-        : Math.min(collapsedPanelHeight + hoverRevealHeight, bounds.height);
+        : Math.min(dockPanelHeight + hoverRevealHeight, bounds.height);
       panelY = dockBottom - heightToUse;
-      panelWindow.setMinimumSize(
-        minimumPanelWidth,
-        isPanelExpanded ? Math.min(minimumExpandedPanelHeight, heightToUse) : heightToUse,
-      );
-      panelWindow.setMaximumSize(maximumPanelWidth, bounds.height);
+      minimumHeight = heightToUse;
       isDockAligned = true;
     } else {
       heightToUse = Math.min(
-        panelHeight + hoverRevealHeight,
+        collapsedPanelHeight,
         Math.max(1, dockRect.y - workArea.y + hoverRevealHeight),
       );
       panelY = dockRect.y - heightToUse;
-      panelWindow.setMinimumSize(
-        minimumPanelWidth,
-        Math.min(minimumExpandedPanelHeight, heightToUse),
-      );
+      minimumHeight = Math.min(44, heightToUse);
     }
   } else if (orientation === "left" && dockRect) {
     panelX = dockRect.x + dockRect.width;
-    heightToUse = panelHeight;
   } else if (orientation === "right" && dockRect) {
     panelX = dockRect.x - widthToUse;
-    heightToUse = panelHeight;
   }
 
   if (isPanelExpanded) {
     heightToUse = Math.max(1, workArea.height);
     panelY = workArea.y;
+    minimumHeight = Math.min(minimumExpandedPanelHeight, heightToUse);
   }
 
   panelX = Math.min(Math.max(panelX, bounds.x), bounds.x + bounds.width - widthToUse);
@@ -333,6 +327,15 @@ function positionPanel(): void {
     width: widthToUse,
     height: heightToUse,
   };
+  const [currentMinimumWidth, currentMinimumHeight] = panelWindow.getMinimumSize();
+  if (currentMinimumWidth !== minimumPanelWidth || currentMinimumHeight !== minimumHeight) {
+    panelWindow.setMinimumSize(minimumPanelWidth, minimumHeight);
+  }
+  const [currentMaximumWidth, currentMaximumHeight] = panelWindow.getMaximumSize();
+  if (currentMaximumWidth !== maximumPanelWidth || currentMaximumHeight !== bounds.height) {
+    panelWindow.setMaximumSize(maximumPanelWidth, bounds.height);
+  }
+  if (panelWindow.hasShadow() !== isPanelExpanded) panelWindow.setHasShadow(isPanelExpanded);
   if (
     currentBounds.x === nextBounds.x
     && currentBounds.y === nextBounds.y
@@ -340,7 +343,6 @@ function positionPanel(): void {
     && currentBounds.height === nextBounds.height
   ) return;
 
-  panelWindow.setHasShadow(isPanelExpanded || !isDockAligned);
   panelWindow.setBounds(nextBounds);
 }
 
@@ -392,7 +394,7 @@ function updatePanelHoverState(): void {
 function createPanel(): void {
   panelWindow = new BrowserWindow({
     width: panelWidth,
-    height: panelHeight,
+    height: collapsedPanelHeight,
     show: false,
     frame: false,
     transparent: true,
@@ -463,7 +465,11 @@ void app.whenReady().then(async () => {
   });
 
   registerIpcHandlers();
-  await refreshDockGeometry(true);
+  if (process.platform === "darwin"
+    && !systemPreferences.isTrustedAccessibilityClient(false)) {
+    systemPreferences.isTrustedAccessibilityClient(true);
+  }
+  await refreshDockGeometry();
   createPanel();
   setInterval(updatePanelHoverState, pollPanelHoverInterval);
   setInterval(() => void refreshDockGeometry(), pollDockGeometryInterval);

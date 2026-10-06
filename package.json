@@ -4,6 +4,10 @@
   "private": true,
   "packageManager": "bun@1.4.0",
   "scripts": {
+    "landing:dev": "bun run --filter side-landing dev",
+    "landing:build": "bun run --filter side-landing build",
+    "landing:preview": "bun run --filter side-landing preview",
+    "landing:deploy": "bun run --filter side-landing deploy",
     "start": "bun run --filter side-panel start",
     "package": "bun run --filter side-panel package",
     "make": "bun run --filter side-panel make",
@@ -11,6 +15,7 @@
     "typecheck": "bun run --filter side-panel typecheck"
   },
   "workspaces": [
+    "app/landing",
     "app/desktop",
     "packages/pi-agent"
   ],

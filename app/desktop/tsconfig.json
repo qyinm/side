@@ -15,6 +15,7 @@
     ],
     "baseUrl": ".",
     "paths": {
+      "vite": ["./node_modules/vite", "../../node_modules/vite"],
       "@/*": [
         "src/*"
       ]
