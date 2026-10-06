@@ -25,7 +25,7 @@ The build disables Docker discovery using `WRANGLER_DOCKER_BIN=false`: this asse
 
 Copy `.env.example` to `.env.local` in this workspace and set:
 
-- `VITE_DOWNLOAD_URL`: optional override for the public Mac download URL. By default, all three download links point to the signed, notarized Side 1.0.2 Apple Silicon DMG and work without JavaScript. Update these default links when publishing a new release.
+- `VITE_DOWNLOAD_URL`: optional override for the public Mac download URL. By default, all three download links point to the signed, notarized Side 1.0.3 Apple Silicon DMG and work without JavaScript. Update these default links when publishing a new release.
 - `VITE_PRODUCT_HUNT_URL`: the published Product Hunt listing URL. The listing link stays hidden until configured.
 
 Rebuild after changing these values. The download must point to a publicly accessible installer.
