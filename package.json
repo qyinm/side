@@ -26,6 +26,8 @@
   },
   "trustedDependencies": [
     "electron",
-    "esbuild"
+    "esbuild",
+    "fs-xattr",
+    "macos-alias"
   ]
 }

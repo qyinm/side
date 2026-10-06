@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerZIP } from '@electron-forge/maker-zip';
+import { MakerDMG } from '@electron-forge/maker-dmg';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
@@ -19,7 +20,10 @@ const config: ForgeConfig = {
       ignore: '\\.(?:pak|asar|bin|dat|icns|car)$',
     },
     icon: path.resolve(__dirname, '../../desktop-app-icon.icon'),
-    extraResource: [path.join(__dirname, 'native', 'dock-geometry')],
+    extraResource: [
+      path.join(__dirname, 'native', 'dock-geometry'),
+      ...['LICENSE', 'NOTICE', 'BRANDING.md'].map((file) => path.resolve(__dirname, '../..', file)),
+    ],
   },
   rebuildConfig: {},
   hooks: {
@@ -34,6 +38,19 @@ const config: ForgeConfig = {
     },
   },
   makers: [
+    new MakerDMG({
+      format: 'UDZO',
+      background: path.join(__dirname, 'resources', 'dmg-background.png'),
+      icon: path.resolve(__dirname, '../../desktop-app-icon.icns'),
+      iconSize: 80,
+      contents: (options) => [
+        { x: 190, y: 216, type: 'file', path: options.appPath },
+        { x: 468, y: 216, type: 'link', path: '/Applications' },
+      ],
+      additionalDMGOptions: {
+        window: { size: { width: 658, height: 380 } },
+      },
+    }, ['darwin']),
     new MakerZIP({}, ['darwin']),
   ],
   plugins: [
