@@ -72,18 +72,18 @@ Electron Forge writes packaged apps to `app/desktop/out/` and distributables to 
 
 Side keeps provider credentials and model configuration in `pi/` inside Electron's app-specific user data directory. The Pi runtime uses local files including `auth.json` and `models.json`; these are separate from another Pi installation's configuration.
 
-The conversation lives in memory and is lost when the app quits. Switching models keeps the current conversation context, so subsequent requests may send that context to the newly selected provider.
+Chat sessions are saved locally in `pi/sessions.json`, including messages and model settings. Use the history button to resume a chat and the `+` button to start a new one. Switching models within a session keeps its conversation context, so subsequent requests may send that context to the newly selected provider.
 
 Sign-in and chat requests use your provider's network endpoints. Automatic network model-catalog refresh is disabled at startup. Accessibility access is used by the native helper to read the Dock's position and size.
 
 ## Current limits
 
-- One conversation at a time, with no saved history or cloud sync.
+- One active response at a time; local session history has no cloud sync.
 - Text chat only; no file attachments, filesystem tools, or shell execution.
 - No external coding-agent or CLI sessions are launched.
 - Provider availability and authentication support depend on Pi.
-- Models with reasoning support are marked, but reasoning effort is not adjustable in the UI.
-- Distribution signing and notarization are not configured in the current Forge configuration.
+- Reasoning effort choices depend on the selected model's supported levels.
+- Developer ID signing is configured; notarization and public installer verification remain unfinished.
 
 ## Development notes
 
@@ -94,3 +94,9 @@ See [Desktop development and architecture](app/desktop/README.md) for more detai
 ## Inspiration
 
 Side's Dock-adjacent form and this README's product-first structure were inspired by [Starboard](https://github.com/palamim/starboard), a persistent macOS terminal panel. Side brings that nearby-panel idea to multi-provider AI chat.
+
+## License
+
+Source code and original generic illustrations are licensed under [MIT](LICENSE).
+Side's logo, app icon, mascot, and social artwork have separate [brand usage terms](BRANDING.md).
+Third-party dependencies retain their own licenses.
