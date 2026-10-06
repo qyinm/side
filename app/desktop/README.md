@@ -11,6 +11,8 @@ A macOS-first, Dock-adjacent chat panel for models configured through Pi. Side u
 - Run `bun run typecheck` and `bun run package` from the repository root to verify/package the app.
 - Run `bun run make` from the repository root to create a macOS ZIP distributable.
 
+The macOS app icon comes from `desktop-app-icon.icon` at the repository root. Packaging this Icon Composer asset requires macOS 26+ and Xcode 26+. An `.icns` fallback is needed to show the custom icon on earlier macOS versions.
+
 Pi credentials and model configuration are isolated under the app's user data directory in `pi/`. The initial runtime starts with network model-catalog refresh disabled; provider sign-in and chat requests use the provider's network endpoints when explicitly invoked.
 
 ## Current scope

@@ -8,6 +8,7 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    icon: path.resolve(__dirname, '../../desktop-app-icon.icon'),
     extraResource: [path.join(__dirname, 'native', 'dock-geometry')],
   },
   rebuildConfig: {},
